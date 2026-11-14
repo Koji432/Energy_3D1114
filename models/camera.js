@@ -420,7 +420,7 @@ export function createCameraProduct() {
       // Drive, dwell while the rollers draw the sheet, then reset the claw.
       const forward = THREE.MathUtils.smoothstep(phase, .04, .36);
       const reset = THREE.MathUtils.smoothstep(phase, .73, .97);
-      const angular = Math.PI / 2 - Math.PI * (forward - reset);
+      const angular = -Math.PI / 2 + Math.PI * (forward - reset);
       const motorAngular = angular * 20 / 14;
       barrel.rotation.x = angular;
       camGear.rotation.x = angular;
@@ -433,8 +433,8 @@ export function createCameraProduct() {
       rearRoller.rotation.x = rollerMotion;
       const slide = grooveCenter(Math.PI / 2 - angular);
       const swing = Math.asin(THREE.MathUtils.clamp((slide + .16) / lower, -.95, .95));
-      pivot.rotation.z = -swing;
-      const rock = reach * Math.sin(swing) + .14 * (1 - Math.cos(swing));
+      pivot.rotation.z = swing;
+      const rock = -reach * Math.sin(swing) + .14 * (1 - Math.cos(swing));
       const rockMin = reach * (-.31 / lower) + .14 * (1 - Math.sqrt(1 - (.31 / lower) ** 2));
       pick.position.y = rock - rockMin;
       const exit = THREE.MathUtils.smoothstep(phase, .38, .78);
