@@ -322,6 +322,15 @@ function guideLine(root, color, a, b) {
 export function createCameraProduct() {
   const root = new THREE.Group();
   const body = cameraCase(root);
+  const shells = [];
+  for (const container of [body.front, body.frame]) container.traverse(part => {
+    if (!part.material) return;
+    part.material = part.material.clone();
+    part.material.transparent = true;
+    part.material.depthWrite = false;
+    part.material.opacity = .13;
+    shells.push(part);
+  });
   const gears = group(root);
   const cams = group(root);
   const linkage = group(root);
@@ -408,6 +417,12 @@ export function createCameraProduct() {
     guideLine(root, 0xef9a37, group(pick, 0, .68, -.61), group(film, -1.04, .75, -.22)),
   ];
 
+  const mechanismGroups = { gears, linkage, cam: cams };
+  for (const container of Object.values(mechanismGroups)) container.traverse(part => {
+    if (!part.material) return;
+    part.material = Array.isArray(part.material) ? part.material.map(m => m.clone()) : part.material.clone();
+  });
+  let lastFocus;
   const api = {
     root,
     camera: [5.18, 4.55, 11.4],
@@ -415,7 +430,20 @@ export function createCameraProduct() {
     explodedCamera: [4.8, 5.82, 15.0],
     explodedTarget: [.24, 2.83, 0],
     labels,
-    update(turn, explode = 0) {
+    update(turn, explode = 0, focus = null) {
+      for (const shell of shells) shell.material.opacity = .13 + .74 * explode;
+      if (lastFocus !== focus) {
+        for (const [name, container] of Object.entries(mechanismGroups)) container.traverse(part => {
+          if (!part.material) return;
+          for (const material of [part.material].flat()) {
+            const dim = focus && name !== focus;
+            material.transparent = !!dim;
+            material.opacity = dim ? .2 : 1;
+            material.depthWrite = !dim;
+          }
+        });
+        lastFocus = focus;
+      }
       const phase = ((turn % 1) + 1) % 1;
       // Drive, dwell while the rollers draw the sheet, then reset the claw.
       const forward = THREE.MathUtils.smoothstep(phase, .04, .36);

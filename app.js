@@ -1,12 +1,14 @@
 import * as THREE from 'three';
 import { OrbitControls } from './vendor/OrbitControls.js';
-import { createMotion } from './models/motion.js';
-import { createMechanism } from './models/mechanisms.js';
+import { createMotion } from './models/motion.js?v=20261114-4';
+import { createMechanism } from './models/mechanisms.js?v=20261114-4';
+import { createBicycle, bicycleGears } from './models/bicycle.js?v=20261114-4';
 
 const pages = [
   { id: 'motion', title: '運動の種類' },
   { id: 'mechanisms', title: '機構の動き' },
   { id: 'products', title: '製品のしくみ' },
+  { id: 'bicycle', title: '自転車のギア比' },
 ];
 const motionCards = [
   { id: 'carousel', title: '直線運動', subtitle: 'メリーゴーランドの馬の上下運動', icon: 'straight', accent: '#22795e', chip: '#e0f5ed', tint: '#e6f1ec' },
@@ -19,8 +21,8 @@ const mechanismCards = [
   { id: 'cam', title: 'カム機構', icon: 'cam', accent: '#9c63e9', chip: '#f0e8ff', tint: '#eeeafa' },
 ];
 const products = [
-  { id: 'car', title: '車のワイパー', button: '車', icon: 'car', rate: .24, load: () => import('./models/car.js').then(module => module.createCar()) },
-  { id: 'camera', title: 'チェキのフィルム送り', button: 'チェキ', icon: 'camera', rate: .16, load: () => import('./models/camera.js').then(module => module.createCameraProduct()) },
+  { id: 'car', title: 'エンジン', button: '車', icon: 'car', rate: .24, load: () => import('./models/car-engine.js?v=20261114-4').then(module => module.createCarEngine()) },
+  { id: 'camera', title: 'チェキのフィルム送り', button: 'チェキ', icon: 'camera', rate: .16, load: () => import('./models/camera.js?v=20261114-4').then(module => module.createCameraProduct()) },
 ];
 
 const workspace = document.querySelector('#workspace');
@@ -32,21 +34,60 @@ const next = document.querySelector('#next');
 const pageCount = document.querySelector('#page-count');
 const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)');
 const icon = name => `<svg aria-hidden="true"><use href="#i-${name}"/></svg>`;
-const playhead = { motion: 0, mechanisms: 0, products: 0 };
+const playhead = { motion: 0, mechanisms: 0, products: 0, bicycle: 0 };
 let page = '';
 let product = products[0];
 let running = !reduceMotion.matches;
 let exploded = false;
+let extracted = false;
 let focusPart = null;
 let views = [];
 let selectionVersion = 0;
 
 function playbackLabel() {
-  playback.innerHTML = running ? `${icon('pause')}一時停止` : `${icon('play')}再生`;
+  playback.innerHTML = icon(running ? 'pause' : 'play');
+  playback.setAttribute('aria-label', running ? '一時停止' : '再生');
+  playback.title = running ? '一時停止' : '再生';
 }
 
+const fullView = document.querySelector('#full-view');
+const playbackPanel = document.querySelector('.playback');
+let expandedArticle = null;
+let returnFocus = null;
+let placeholder = null;
+
+function expandView(article, trigger) {
+  if (expandedArticle) return;
+  expandedArticle = article;
+  returnFocus = trigger;
+  placeholder = document.createComment('expanded model');
+  article.before(placeholder);
+  fullView.append(article);
+  fullView.querySelector('.full-toolbar').append(playbackPanel);
+  fullView.showModal();
+  document.body.style.overflow = 'hidden';
+  if (document.documentElement.requestFullscreen && !document.fullscreenElement) {
+    document.documentElement.requestFullscreen().catch(() => {});
+  }
+}
+function closeFullView() {
+  if (!expandedArticle) return;
+  placeholder.replaceWith(expandedArticle);
+  document.querySelector('.page-heading').append(playbackPanel);
+  expandedArticle = null;
+  fullView.close();
+  document.body.style.overflow = '';
+  returnFocus?.focus();
+  if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+}
+fullView.addEventListener('cancel', event => { event.preventDefault(); closeFullView(); });
+document.querySelector('#close-full').addEventListener('click', closeFullView);
+document.addEventListener('fullscreenchange', () => {
+  if (!document.fullscreenElement && expandedArticle) closeFullView();
+});
+
 function viewResetButton() {
-  return `<button type="button" class="button compact view-reset" aria-label="視点を戻す" title="視点を戻す">${icon('crosshair')}</button>`;
+  return `<button type="button" class="button compact view-expand" aria-label="全画面表示" title="全画面表示">${icon('expand')}</button><button type="button" class="button compact view-reset" aria-label="視点を戻す" title="視点を戻す">${icon('crosshair')}</button>`;
 }
 
 function disposeModel(root) {
@@ -78,7 +119,7 @@ function createView(element, model, title, rate, isProduct = false) {
     disposeModel(model.root);
     return;
   }
-  renderer.setPixelRatio(Math.min(devicePixelRatio, 1.6));
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
   renderer.setClearColor(0xffffff, 0);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -113,12 +154,18 @@ function createView(element, model, title, rate, isProduct = false) {
   let width = 1;
   let height = 1;
   let spread = 0;
+  let extraction = 0;
+  let manualTurn = 0;
+  const manual = element.parentElement.querySelector('.manual-control');
   let cameraGoal = null;
-  const annotations = isProduct ? createAnnotations(element) : null;
+  let directManipulation = !!manual;
+  controls.enabled = !directManipulation;
+  if (manual) canvas.style.touchAction = 'none';
   function viewPose() {
     const open = isProduct && exploded;
-    const target = new THREE.Vector3(...(open && model.explodedTarget || model.target));
-    const position = new THREE.Vector3(...(open && model.explodedCamera || model.camera));
+    const detail = isProduct && extracted;
+    const target = new THREE.Vector3(...(open && model.explodedTarget || detail && model.detailTarget || model.target));
+    const position = new THREE.Vector3(...(open && model.explodedCamera || detail && model.detailCamera || model.camera));
     const fit = isProduct ? Math.max(1, 1.48 / camera.aspect) : Math.max(1, .94 / camera.aspect);
     position.sub(target).multiplyScalar(fit).add(target);
     const distance = position.distanceTo(target);
@@ -149,7 +196,7 @@ function createView(element, model, title, rate, isProduct = false) {
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
     renderer.setSize(w, h, false);
-    if (firstSize || Math.abs(oldAspect - camera.aspect) > .22) resetView();
+    if (firstSize || Math.abs(oldAspect - camera.aspect) > .01) resetView();
   }
   const observer = new ResizeObserver(resize);
   observer.observe(element);
@@ -158,7 +205,115 @@ function createView(element, model, title, rate, isProduct = false) {
   const reset = () => resetView(true);
   element.querySelector('.view-reset').addEventListener('click', reset);
   controls.addEventListener('start', () => { cameraGoal = null; });
+  const article = element.closest('article');
+  const expand = () => expandView(article, canvas);
+  element.querySelector('.view-expand').addEventListener('click', expand);
+  let pointerStart;
+  let lastModelAngle;
+  let pointerMoved = false;
+  const driveCenter = new THREE.Vector3();
+  function modelAngle(event) {
+    driveCenter.set(...(model.drivePoint || model.target));
+    model.root.localToWorld(driveCenter).project(camera);
+    const rect = canvas.getBoundingClientRect();
+    return Math.atan2(-(event.clientY - rect.top - (1 - driveCenter.y) * rect.height / 2),
+      event.clientX - rect.left - (driveCenter.x + 1) * rect.width / 2);
+  }
+  canvas.addEventListener('pointerdown', event => {
+    if (!event.isPrimary || event.button !== 0 || pointerStart) return;
+    pointerStart = { x: event.clientX, y: event.clientY, id: event.pointerId };
+    pointerMoved = false;
+    if (directManipulation) {
+      canvas.setPointerCapture(event.pointerId);
+      lastModelAngle = modelAngle(event);
+      turnByHand(manualTurn);
+    }
+  });
+  canvas.addEventListener('pointermove', event => {
+    if (!pointerStart || pointerStart.id !== event.pointerId) return;
+    pointerMoved ||= Math.hypot(event.clientX - pointerStart.x, event.clientY - pointerStart.y) > 5;
+    if (!directManipulation || !pointerMoved) return;
+    const angle = modelAngle(event);
+    const difference = Math.atan2(Math.sin(angle - lastModelAngle), Math.cos(angle - lastModelAngle));
+    const direction = page === 'bicycle' ? -1 : 1;
+    turnByHand(manualTurn + direction * difference / (Math.PI * 2 * (model.dragResistance || 1)));
+    lastModelAngle = angle;
+  });
+  canvas.addEventListener('pointerup', event => {
+    if (pointerStart?.id !== event.pointerId) return;
+    if (pointerStart && !pointerMoved) {
+      if (directManipulation) turnByHand(manualTurn + 1 / (24 * (model.dragResistance || 1)));
+      expand();
+    }
+    pointerStart = null;
+  });
+  for (const name of ['pointercancel', 'lostpointercapture']) canvas.addEventListener(name, event => {
+    if (pointerStart?.id === event.pointerId) pointerStart = null;
+  });
+  if (manual) {
+    const orbit = document.createElement('button');
+    orbit.className = 'button compact view-orbit';
+    orbit.innerHTML = icon('hand');
+    orbit.setAttribute('aria-label', '動かす・視点を回す');
+    orbit.title = '動かす・視点を回す';
+    orbit.setAttribute('aria-pressed', 'false');
+    element.append(orbit);
+    orbit.addEventListener('click', () => {
+      directManipulation = !directManipulation;
+      controls.enabled = !directManipulation;
+      orbit.innerHTML = icon(directManipulation ? 'hand' : 'eye');
+      orbit.setAttribute('aria-pressed', String(!directManipulation));
+    });
+  }
+  const input = manual?.querySelector('input');
+  const dial = manual?.querySelector('.handwheel');
+  function turnByHand(value) {
+    running = false;
+    playbackLabel();
+    manualTurn = value;
+    syncManual();
+  }
+  function syncManual() {
+    if (!manual) return;
+    const degrees = ((manualTurn * 360) % 720 + 720) % 720;
+    if (input) input.value = degrees;
+    dial.style.setProperty('--angle', `${manualTurn * 360}deg`);
+    dial.setAttribute('aria-valuenow', Math.round(degrees));
+    dial.setAttribute('aria-valuetext', `${Math.round(degrees)}度`);
+  }
+  input?.addEventListener('input', () => turnByHand(Number(input.value) / 360));
+  let lastDialAngle = null;
+  let dialPointer = null;
+  function dialAngle(event) {
+    const rect = dial.getBoundingClientRect();
+    return Math.atan2(event.clientY - rect.top - rect.height / 2, event.clientX - rect.left - rect.width / 2);
+  }
+  dial?.addEventListener('pointerdown', event => {
+    if (!event.isPrimary || event.button !== 0 || dialPointer !== null) return;
+    dialPointer = event.pointerId;
+    dial.setPointerCapture(event.pointerId);
+    lastDialAngle = dialAngle(event);
+    turnByHand(manualTurn);
+  });
+  dial?.addEventListener('pointermove', event => {
+    if (lastDialAngle === null || dialPointer !== event.pointerId) return;
+    const angle = dialAngle(event);
+    const difference = Math.atan2(Math.sin(angle - lastDialAngle), Math.cos(angle - lastDialAngle));
+    turnByHand(manualTurn + difference / (Math.PI * 2 * (model.dragResistance || 1)));
+    lastDialAngle = angle;
+  });
+  for (const name of ['pointerup', 'pointercancel', 'lostpointercapture']) dial?.addEventListener(name, event => {
+    if (dialPointer === event.pointerId) { lastDialAngle = null; dialPointer = null; }
+  });
+  dial?.addEventListener('keydown', event => {
+    const amount = { ArrowLeft: -1, ArrowDown: -1, ArrowRight: 1, ArrowUp: 1, PageUp: 30, PageDown: -30 }[event.key];
+    if (amount !== undefined) {
+      event.preventDefault();
+      turnByHand(manualTurn + amount / (360 * (model.dragResistance || 1)));
+    }
+  });
   canvas.addEventListener('keydown', event => {
+    if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); expand(); return; }
     if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', '+', '-', '=', '0'].includes(event.key)) return;
     event.preventDefault();
     cameraGoal = null;
@@ -180,8 +335,10 @@ function createView(element, model, title, rate, isProduct = false) {
 
   const view = {
     resetView,
+    restart() { manualTurn = 0; model.reset?.(); syncManual(); },
     draw(time, delta) {
       if (isProduct) {
+        extraction = reduceMotion.matches ? Number(extracted) : THREE.MathUtils.damp(extraction, Number(extracted), 4, delta);
         spread = reduceMotion.matches ? Number(exploded) : THREE.MathUtils.damp(spread, Number(exploded), 8, delta);
       }
       if (cameraGoal) {
@@ -191,10 +348,13 @@ function createView(element, model, title, rate, isProduct = false) {
         if (camera.position.distanceToSquared(cameraGoal.position) < 1e-5 &&
             controls.target.distanceToSquared(cameraGoal.target) < 1e-5) cameraGoal = null;
       }
-      model.update(time * rate, spread, isProduct ? focusPart : null);
+      if (manual && running) {
+        manualTurn += delta * Number(speed.value) * rate;
+        syncManual();
+      }
+      model.update(manual ? manualTurn : time * rate, spread, isProduct ? focusPart : null, extraction);
       controls.update();
       renderer.render(scene, camera);
-      if (annotations) updateAnnotations(annotations, model.labels, camera, width, height, spread > .48 || !!focusPart);
     },
     dispose() {
       observer.disconnect();
@@ -210,63 +370,6 @@ function createView(element, model, title, rate, isProduct = false) {
   views.push(view);
 }
 
-function createAnnotations(element) {
-  const holder = document.createElement('div');
-  holder.className = 'annotations';
-  holder.setAttribute('aria-hidden', 'true');
-  const lines = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-  lines.classList.add('annotation-lines');
-  holder.append(lines);
-  const labels = mechanismCards.map(part => {
-    const line = document.createElementNS(lines.namespaceURI, 'line');
-    line.setAttribute('stroke', part.accent);
-    lines.append(line);
-    const label = document.createElement('span');
-    label.className = 'annotation';
-    label.style.setProperty('--part-color', part.accent);
-    label.textContent = part.title;
-    holder.append(label);
-    return { part, line, label };
-  });
-  element.append(holder);
-  return { holder, labels };
-}
-
-const projection = new THREE.Vector3();
-function updateAnnotations(annotations, anchors, camera, width, height, visible) {
-  annotations.holder.hidden = !visible;
-  if (!visible) return;
-  const placed = [];
-  for (const [index, entry] of annotations.labels.entries()) {
-    const { part, line, label } = entry;
-    const anchor = anchors?.[part.id];
-    if (anchor) anchor.getWorldPosition(projection).project(camera);
-    const hidden = !anchor || projection.z > 1 || projection.z < -1 ||
-      Math.abs(projection.x) > 1 || Math.abs(projection.y) > 1 || (focusPart && focusPart !== part.id);
-    label.hidden = hidden;
-    line.style.display = hidden ? 'none' : '';
-    if (hidden) continue;
-
-    const x = (projection.x + 1) * width / 2;
-    const y = (1 - projection.y) * height / 2;
-    const half = label.offsetWidth / 2;
-    const labelX = THREE.MathUtils.clamp(x + (index === 1 ? -30 : 34), half + 6, width - half - 6);
-    let labelY = THREE.MathUtils.clamp(y - 34, 64, height - 40);
-    for (const other of placed) {
-      if (Math.abs(labelX - other.x) < half + other.half + 8 && Math.abs(labelY - other.y) < 26) {
-        labelY = other.y + 28 < height - 38 ? other.y + 28 : other.y - 28;
-      }
-    }
-    placed.push({ x: labelX, y: labelY, half });
-    label.style.left = `${labelX}px`;
-    label.style.top = `${labelY}px`;
-    line.setAttribute('x1', x);
-    line.setAttribute('y1', y);
-    line.setAttribute('x2', labelX);
-    line.setAttribute('y2', labelY);
-  }
-}
-
 function clearViews() {
   for (const view of views) view.dispose();
   views = [];
@@ -278,10 +381,13 @@ function renderCards() {
   workspace.innerHTML = cards.map(card => `
     <article class="card" style="--tint:${card.tint};--accent:${card.accent};--chip:${card.chip}">
       <div class="card-header">
-        <span class="card-symbol">${icon(card.icon)}</span>
-        <div><h2>${card.title}</h2>${card.subtitle ? `<p>${card.subtitle}</p>` : ''}</div>
+        <span class="card-symbol" role="img" aria-label="${card.title}" title="${card.title}">${icon(card.icon)}</span>
       </div>
       <div class="view">${viewResetButton()}</div>
+      ${isMotion ? '' : `<div class="manual-control">
+        <div class="handwheel" role="slider" tabindex="0" aria-label="${card.title}を手で回す" aria-valuemin="0" aria-valuemax="720" aria-valuenow="0"><span></span></div>
+        <input type="range" min="0" max="720" step="1" value="0" aria-label="${card.title}の回転角度">
+      </div>`}
     </article>`).join('');
   const elements = workspace.querySelectorAll('.view');
   for (const [index, card] of cards.entries()) {
@@ -291,13 +397,16 @@ function renderCards() {
 }
 
 function syncProducts() {
-  workspace.querySelectorAll('[data-product]').forEach(button => {
+  const scope = expandedArticle || workspace;
+  scope.querySelector('[data-extract]')?.toggleAttribute('hidden', product.id !== 'car');
+  scope.querySelector('[data-extract]')?.setAttribute('aria-pressed', String(extracted));
+  scope.querySelectorAll('[data-product]').forEach(button => {
     button.setAttribute('aria-pressed', button.dataset.product === product.id);
   });
-  workspace.querySelectorAll('[data-explode]').forEach(button => {
+  scope.querySelectorAll('[data-explode]').forEach(button => {
     button.setAttribute('aria-pressed', (button.dataset.explode === 'true') === exploded);
   });
-  workspace.querySelectorAll('[data-part]').forEach(button => {
+  scope.querySelectorAll('[data-part]').forEach(button => {
     button.setAttribute('aria-pressed', button.dataset.part === focusPart);
   });
 }
@@ -306,8 +415,8 @@ async function showProduct() {
   const version = ++selectionVersion;
   clearViews();
   syncProducts();
-  const element = workspace.querySelector('.product-view');
-  element.innerHTML = `<div class="product-caption"><h2>${product.title}</h2><p>模式モデル</p></div>${viewResetButton()}`;
+  const element = (expandedArticle || workspace).querySelector('.product-view');
+  element.innerHTML = viewResetButton();
   const current = product;
   try {
     const model = await current.load();
@@ -329,16 +438,17 @@ function renderProducts() {
     <article class="product">
       <div class="product-bar">
         <div class="product-tabs segment" role="group" aria-label="製品">
-          ${products.map(item => `<button type="button" class="button" data-product="${item.id}">${icon(item.icon)}${item.button}</button>`).join('')}
+          ${products.map(item => `<button type="button" class="button" data-product="${item.id}" aria-label="${item.title}" title="${item.title}">${icon(item.icon)}</button>`).join('')}
         </div>
         <div class="view-modes segment" role="group" aria-label="表示">
-          <button type="button" class="button" data-explode="false">${icon('product')}組み立て</button>
-          <button type="button" class="button" data-explode="true">${icon('explode')}分解</button>
+          <button type="button" class="button" data-extract aria-label="エンジンを取り出す・戻す" title="エンジンを取り出す・戻す">${icon('engine')}</button>
+          <button type="button" class="button" data-explode="false" aria-label="組み立て" title="組み立て">${icon('product')}</button>
+          <button type="button" class="button" data-explode="true" aria-label="分解" title="分解">${icon('explode')}</button>
         </div>
       </div>
       <div class="view product-view"></div>
       <div class="parts" role="group" aria-label="機構を選択">
-        ${mechanismCards.map(part => `<button type="button" class="button part" data-part="${part.id}" style="--part-color:${part.accent}">${part.title}</button>`).join('')}
+        ${mechanismCards.map(part => `<button type="button" class="button part" data-part="${part.id}" style="--part-color:${part.accent}" aria-label="${part.title}" title="${part.title}">${icon(part.icon)}</button>`).join('')}
       </div>
     </article>`;
   workspace.querySelector('.product').addEventListener('click', event => {
@@ -348,27 +458,64 @@ function renderProducts() {
       product = products.find(item => item.id === button.dataset.product);
       playhead.products = 0;
       focusPart = null;
+      exploded = false;
+      extracted = false;
       showProduct();
       return;
+    }
+    if (button.hasAttribute('data-extract')) {
+      extracted = !extracted;
+      if (!extracted) { exploded = false; focusPart = null; }
+      views.forEach(view => view.resetView(true));
     }
     if (button.dataset.explode !== undefined) {
       const nextExploded = button.dataset.explode === 'true';
       if (nextExploded !== exploded) {
         exploded = nextExploded;
+        if (exploded && product.id === 'car') extracted = true;
         if (!exploded) focusPart = null;
         views.forEach(view => view.resetView(true));
       }
     }
     if (button.dataset.part) {
       focusPart = focusPart === button.dataset.part ? null : button.dataset.part;
-      if (focusPart && !exploded) {
-        exploded = true;
+      if (focusPart && product.id === 'car' && !extracted) {
+        extracted = true;
         views.forEach(view => view.resetView(true));
       }
     }
     syncProducts();
   });
   showProduct();
+}
+
+function renderBicycle() {
+  workspace.className = '';
+  workspace.innerHTML = `<article class="product bicycle" style="--accent:#3873e6;--chip:#e6efff">
+    <div class="product-bar">
+      <span class="gear-equation" aria-label="前の歯数42">${icon('gears')}42T</span>
+      <div class="segment" role="group" aria-label="後ろのギアを選択">
+        ${bicycleGears.map((teeth,i) => `<button class="button" data-gear="${i}" aria-label="後ろ${teeth}歯" aria-pressed="${i===0}">${teeth}T</button>`).join('')}
+      </div>
+    </div>
+    <div class="view product-view">${viewResetButton()}</div>
+    <div class="manual-control bicycle-control">
+      <div class="handwheel" role="slider" tabindex="0" aria-label="ペダルを手で回す" aria-valuemin="0" aria-valuemax="720" aria-valuenow="0"><span></span></div>
+      <div class="gear-metric" title="同じ車輪負荷に必要なペダルの力">${icon('force')}<meter id="effort-meter" min="0" max="2.5" value="1" aria-label="必要な力"></meter><output id="effort">1.00×</output></div>
+      <div class="gear-metric" title="ペダル1回転あたりの車輪回転数">${icon('speed')}<meter id="speed-meter" min="0" max="3" value="1.24" aria-label="車輪の速さ"></meter><output id="wheel-rate">1.24×</output></div>
+    </div>
+  </article>`;
+  const model = createBicycle();
+  createView(workspace.querySelector('.view'), model, '自転車', .28);
+  workspace.querySelectorAll('[data-gear]').forEach(button => button.addEventListener('click', () => {
+    const scope = expandedArticle || workspace;
+    model.setGear(Number(button.dataset.gear));
+    scope.querySelectorAll('[data-gear]').forEach(other => other.setAttribute('aria-pressed',String(other===button)));
+    scope.querySelector('#effort').textContent = `${model.dragResistance.toFixed(2)}×`;
+    scope.querySelector('#wheel-rate').textContent = `${model.ratio.toFixed(2)}×`;
+    scope.querySelector('#effort-meter').value = model.dragResistance;
+    scope.querySelector('#speed-meter').value = model.ratio;
+  }));
 }
 
 function setPageLink(link, destination) {
@@ -384,9 +531,12 @@ function route() {
   const index = Math.max(pages.findIndex(item => location.hash === `#${item.id}`), 0);
   const nextPage = pages[index];
   if (page === nextPage.id) return;
+  closeFullView();
   ++selectionVersion;
   clearViews();
   page = nextPage.id;
+  running = !['mechanisms', 'bicycle'].includes(page) && !reduceMotion.matches;
+  playbackLabel();
   heading.textContent = nextPage.title;
   document.title = `${nextPage.title} | 動きのしくみ`;
   document.querySelectorAll('[data-page]').forEach(link => {
@@ -397,6 +547,7 @@ function route() {
   setPageLink(next, pages[index + 1]);
   pageCount.textContent = `${index + 1} / ${pages.length}`;
   if (page === 'products') renderProducts();
+  else if (page === 'bicycle') renderBicycle();
   else renderCards();
   window.scrollTo(0, 0);
 }
@@ -411,7 +562,7 @@ reduceMotion.addEventListener('change', event => {
     playbackLabel();
   }
 });
-document.querySelector('#restart').addEventListener('click', () => { playhead[page] = 0; });
+document.querySelector('#restart').addEventListener('click', () => { playhead[page] = 0; views.forEach(view => view.restart()); });
 window.addEventListener('hashchange', route);
 playbackLabel();
 route();

@@ -190,7 +190,7 @@ function gears() {
   arcArrow(root, -radiusB, y, .445, radiusA * .91, 1.95, 3.19, arrows);
   arcArrow(root, radiusA, y, .445, radiusB * .91, .07, -1.11, arrows);
   return {
-    root, camera: [1.74, 3.7, 9.8], target: [0, 1.81, 0],
+    root, camera: [1.74, 3.7, 9.8], target: [0, 1.81, 0], drivePoint: [-radiusB, y, .45],
     update(turn) {
       driver.rotation.z = turn * TAU;
       driven.rotation.z = Math.PI / teethB - driver.rotation.z * teethA / teethB;
@@ -244,7 +244,7 @@ function linkage() {
   const fixedEnd = new THREE.Vector2();
   const movingEnd = new THREE.Vector2();
   return {
-    root, camera: [1.55, 3.06, 8.9], target: [0, 1.39, 0],
+    root, camera: [1.55, 3.06, 8.9], target: [0, 1.39, 0], drivePoint: [drive.x, drive.y, .55],
     update(turn) {
       const angle = turn * TAU + Math.PI / 2;
       fixedEnd.set(drive.x + crankRadius * Math.cos(angle), drive.y + crankRadius * Math.sin(angle));
@@ -293,14 +293,14 @@ function verticalBar(root, radius, height, material, x = 0, y = 0, z = 0) {
 function cam() {
   const root = new THREE.Group();
   const x = -.54;
-  const y = 1.52;
+  const y = 2.15;
   const z = .35;
-  const guideY = 4.42;
+  const guideY = 5.05;
   base(root, 4.33, palette.lilac);
   pedestal(root, x, y, z + .23);
-  const tower = extrude(root, roundRect(.64, 4.09, .17), .54, palette.frame, x + .8, 2.3, -.46, .045);
+  const tower = extrude(root, roundRect(.64, 4.72, .17), .54, palette.frame, x + .8, 2.615, -.46, .045);
   tower.castShadow = false;
-  box(root, .17, 3.28, .026, palette.inner, x + .8, 2.19, -.17);
+  box(root, .17, 3.91, .026, palette.inner, x + .8, 2.505, -.17);
   extrude(root, roundRect(1.44, .38, .13), .53, palette.frame, x + .43, guideY, -.37, .027);
   box(root, .38, .31, .75, palette.frame, x, guideY, .082);
   verticalBar(root, .242, .23, palette.plum, x, guideY, z);
@@ -345,7 +345,7 @@ function cam() {
     tip.castShadow = false;
   }
   return {
-    root, camera: [2.1, 4.55, 10.8], target: [-.12, 2.49, 0],
+    root, camera: [2.1, 4.95, 12.1], target: [-.12, 2.8, 0], drivePoint: [x, y, .6],
     update(turn) {
       const angle = turn * TAU;
       drive.rotation.z = angle;

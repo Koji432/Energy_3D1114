@@ -155,13 +155,13 @@ function carousel() {
 
     const arrowX = 0.69;
     const arrowZ = 0.23;
-    // The arrows turn with the deck, showing motion relative to each pole.
+    // The deck stays fixed so each horse follows a straight vertical path.
     strut(station, [arrowX, 0.87, arrowZ], [arrowX, 1.49, arrowZ], 0.019, movement);
     tip(station, [arrowX, 1.59, arrowZ], [0, 1, 0], 0.064, 0.16, movement);
     tip(station, [arrowX, 0.77, arrowZ], [0, -1, 0], 0.064, 0.16, movement);
   }
   function update(turn) {
-    ride.rotation.y = 0.13 * tau * turn;
+    ride.rotation.y = 0;
     riders.forEach((rider, index) => {
       rider.position.y = 1.04 + 0.26 * Math.sin(tau * turn - index * tau / riders.length);
     });
@@ -181,11 +181,12 @@ function teacupRide() {
   const lathePot = [[0.08, 0], [0.31, 0], [0.37, 0.065], [0.47, 0.17], [0.50, 0.31], [0.48, 0.43], [0.40, 0.53], [0.31, 0.55]];
   const cupWall = [[0, 0], [0.24, 0], [0.33, 0.045], [0.40, 0.15], [0.465, 0.38], [0.47, 0.49], [0.452, 0.516], [0.419, 0.50], [0.40, 0.37], [0.345, 0.18], [0.265, 0.098], [0, 0.098]];
   cylinder(root, 1.87, 1.92, 0.14, navy, [0, 0.07, 0]);
-  cylinder(root, 1.89, 1.89, 0.095, blue, [0, 0.145, 0]);
-  cylinder(root, 1.85, 1.88, 0.085, porcelainShade, [0, 0.227, 0]);
-  hoop(root, 1.78, 0.017, ivory, [0, 0.274, 0]);
+  const platform = group(root);
+  cylinder(platform, 1.89, 1.89, 0.095, blue, [0, 0.145, 0]);
+  cylinder(platform, 1.85, 1.88, 0.085, porcelainShade, [0, 0.227, 0]);
+  hoop(platform, 1.78, 0.017, ivory, [0, 0.274, 0]);
 
-  const pot = group(root, [0, 0.27, 0]);
+  const pot = group(platform, [0, 0.27, 0]);
   cylinder(pot, 0.50, 0.55, 0.12, navy, [0, 0.06, 0]);
   lathe(pot, lathePot, porcelain, [0, 0.105, 0]);
   hoop(pot, 0.481, 0.019, blue, [0, 0.492, 0]);
@@ -200,7 +201,7 @@ function teacupRide() {
   const cupColors = [material(0x4c9ccb, 0.27), material(0x769db6, 0.27), porcelain];
   for (let index = 0; index < cupColors.length; index++) {
     const angle = index * tau / cupColors.length + 0.15;
-    const station = group(root, [Math.sin(angle) * 1.20, 0.284, Math.cos(angle) * 1.20]);
+    const station = group(platform, [Math.sin(angle) * 1.20, 0.284, Math.cos(angle) * 1.20]);
     cylinder(station, 0.593, 0.625, 0.092, navy, [0, 0.044, 0]);
     hoop(station, 0.57, 0.013, porcelain, [0, 0.099, 0]);
     const cup = group(station, [0, 0.086, 0]);
@@ -225,6 +226,7 @@ function teacupRide() {
   }
 
   function update(turn) {
+    platform.rotation.y = -turn * tau * .28;
     cups.forEach((cup, index) => {
       cup.rotation.y = (turn * 0.78 + index * 0.33) * tau;
     });
@@ -341,10 +343,24 @@ function carWiper() {
   const window = [[-1.238, 0.055], [1.238, 0.055], [1.133, 0.44], [0.952, 1.12], [-0.952, 1.12], [-1.133, 0.44]];
   beveledPanel(windscreen, frame, 0.018, 0.03, dark, [0, 0, 0]);
   beveledPanel(windscreen, window, 0.01, 0.013, glass, [0, 0, 0.046]);
-  const pivots = [-0.99, 0.18];
-  const low = 0.14;
-  const high = 1.34;
-  const angleAt = turn => low + (high - low) * (1 - Math.cos((turn + 0.18) * tau)) / 2;
+  const pivots = [-0.37, 0.80];
+  // A continuously turning crank drives an oscillating rocker. Both wipers
+  // turn about fixed pivots in the plane of the windscreen.
+  const angleAt = turn => {
+    const theta = turn * tau;
+    const ax = .60 * Math.cos(theta);
+    const ay = .60 * Math.sin(theta);
+    const dx = 2 - ax;
+    const dy = -ay;
+    const distance = Math.hypot(dx, dy);
+    const along = (1.80 ** 2 - 1 + distance ** 2) / (2 * distance);
+    const height = Math.sqrt(1.80 ** 2 - along ** 2);
+    const bx = ax + (along * dx - height * dy) / distance;
+    const by = ay + (along * dy + height * dx) / distance;
+    return Math.atan2(by, bx - 2) + .12;
+  };
+  const low = 1.60;
+  const high = 3.01;
   const wipers = pivots.map(x => {
     const mountAt = [x, 0.083, 0.083];
     const hinge = mount(windscreen, new THREE.CylinderGeometry(0.065, 0.075, 0.039, 25), dark, mountAt);
@@ -352,12 +368,12 @@ function carWiper() {
     const arm = group(windscreen, [x, 0.083, 0.11]);
     beveledPanel(arm, [[0.025, -0.025], [0.48, -0.027], [0.62, -0.01], [0.62, 0.025], [0.025, 0.025]], 0.026, 0.01, orange, [0, 0, 0]);
     const blade = group(arm, [0.686, 0.033, -0.012]);
-    blade.rotation.z = 0.13;
+    blade.rotation.z = -.035;
     beveledPanel(blade, [[-0.24, -0.038], [0.31, -0.027], [0.326, 0.008], [0.24, 0.024], [-0.16, 0.038], [-0.24, 0.009]], 0.023, 0.008, rubber, [0, 0, 0.015]);
     box(blade, [0.14, 0.052, 0.035], orange, [-0.036, 0, 0.044]);
 
     angularArrow(windscreen, low + 0.05, high - 0.06,
-      angle => [x + 1.00 * Math.cos(angle), 0.082 + 1.00 * Math.sin(angle), 0.080],
+      angle => [x + .91 * Math.cos(angle), 0.082 + .91 * Math.sin(angle), 0.080],
       movement, 0.038);
     return arm;
   });
