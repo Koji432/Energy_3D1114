@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f5f7f9">
+  <title>動きのしくみ</title>
+  <link rel="icon" href="./favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="./style.css">
+  <script type="importmap">{"imports":{"three":"./vendor/three.module.js"}}</script>
+  <script type="module" src="./app.js"></script>
+</head>
+<body>
+  <svg class="symbols" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <symbol id="i-logo" viewBox="0 0 24 24"><circle cx="8" cy="15" r="4"/><circle cx="17" cy="7" r="3"/><path d="m5 12 9-7m-3 12 8-7"/><path d="M8 15h.01M17 7h.01"/></symbol>
+    <symbol id="i-straight" viewBox="0 0 24 24"><path d="M12 3v18M8 7l4-4 4 4m-8 10 4 4 4-4"/></symbol>
+    <symbol id="i-rotate" viewBox="0 0 24 24"><path d="M5 9a8 8 0 1 1-.5 7M5 4v5h5"/></symbol>
+    <symbol id="i-sway" viewBox="0 0 24 24"><path d="M4 12a10 10 0 0 1 16 0M4 7v5h5m6 0h5V7m-8 5v8m0 0 6-6"/></symbol>
+    <symbol id="i-cam" viewBox="0 0 24 24"><path d="M18 4c2 2 3 5 2 9a8 8 0 1 1-15-5C8 5 15 1 18 4Z"/><circle cx="12" cy="13" r="2"/></symbol>
+    <symbol id="i-motion" viewBox="0 0 24 24"><path d="M3 12h18M7 8l-4 4 4 4m10-8 4 4-4 4"/></symbol>
+    <symbol id="i-gears" viewBox="0 0 24 24"><path d="m10 3-.6 2.6-1.8 1.1-2.6-.8L3 9.4l2 1.8v1.6l-2 1.8 2 3.5 2.6-.8 1.8 1.1.6 2.6h4l.6-2.6 1.8-1.1 2.6.8 2-3.5-2-1.8v-1.6l2-1.8-2-3.5-2.6.8-1.8-1.1L14 3Z"/><circle cx="12" cy="12" r="2.7"/></symbol>
+    <symbol id="i-product" viewBox="0 0 24 24"><path d="m12 2 9 5v10l-9 5-9-5V7Zm0 10L3 7m9 5 9-5m-9 5v10"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><path d="m8 5 12 7-12 7Z" fill="currentColor" stroke-linejoin="round"/></symbol>
+    <symbol id="i-pause" viewBox="0 0 24 24"><path d="M9 5v14m6-14v14" stroke-width="2.8"/></symbol>
+    <symbol id="i-reset" viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 1 2 5m-2-10v5h5"/></symbol>
+    <symbol id="i-crosshair" viewBox="0 0 24 24"><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/><path d="M12 2v4m0 12v4M2 12h4m12 0h4"/></symbol>
+    <symbol id="i-left" viewBox="0 0 24 24"><path d="m14 6-6 6 6 6"/></symbol>
+    <symbol id="i-right" viewBox="0 0 24 24"><path d="m10 6 6 6-6 6"/></symbol>
+    <symbol id="i-car" viewBox="0 0 24 24"><path d="M3 15v-3l2-2 2-5h10l2 5 2 2v5H3Zm2 2v2m14-2v2M5 10h14M6 14h2m8 0h2"/></symbol>
+    <symbol id="i-camera" viewBox="0 0 24 24"><path d="M3 7h4l2-3h6l2 3h4v13H3Z"/><circle cx="12" cy="13" r="3.3"/></symbol>
+    <symbol id="i-explode" viewBox="0 0 24 24"><path d="M12 2 2 7l10 5 10-5Zm-9 10 9 5 9-5m-18 5 9 5 9-5"/></symbol>
+    <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z"/><circle cx="12" cy="12" r="2.5"/></symbol>
+  </svg>
+  <header class="topbar">
+    <div class="top-inner">
+      <a class="brand" href="#motion"><span class="brand-mark"><svg><use href="#i-logo"/></svg></span>動きのしくみ</a>
+      <nav class="tabs" aria-label="ページ">
+        <a href="#motion" data-page="motion"><svg><use href="#i-motion"/></svg>運動の種類</a>
+        <a href="#mechanisms" data-page="mechanisms"><svg><use href="#i-gears"/></svg>機構の動き</a>
+        <a href="#products" data-page="products"><svg><use href="#i-product"/></svg>製品のしくみ</a>
+      </nav>
+    </div>
+  </header>
+  <main>
+    <div class="page-heading">
+      <h1 id="heading">運動の種類</h1>
+      <div class="playback" aria-label="アニメーション操作">
+        <button id="playback" class="button primary" type="button"></button>
+        <div class="select-wrap">
+          <select id="speed" aria-label="再生速度">
+            <option value="0.25">0.25×</option><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="1.5">1.5×</option><option value="2">2×</option>
+          </select>
+          <svg><use href="#i-right"/></svg>
+        </div>
+        <button id="restart" class="button compact" type="button" aria-label="動きを最初に戻す" title="動きを最初に戻す"><svg><use href="#i-reset"/></svg></button>
+      </div>
+    </div>
+    <section id="workspace" aria-labelledby="heading"></section>
+    <nav class="pagination" aria-label="前後のページ">
+      <a id="previous" class="button compact" aria-label="前のページ"><svg><use href="#i-left"/></svg></a>
+      <span id="page-count"></span>
+      <a id="next" class="button compact" aria-label="次のページ"><svg><use href="#i-right"/></svg></a>
+    </nav>
+    <noscript>3Dモデルの表示にはJavaScriptが必要です。</noscript>
+  </main>
+</body>
+</html>
