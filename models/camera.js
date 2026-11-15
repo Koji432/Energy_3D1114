@@ -233,7 +233,14 @@ const camY = 1.63;
 const camZ = .04;
 const camRadius = .326;
 const trackWidth = .084;
-const grooveCenter = angle => -.47 + .62 * (.5 - .5 * Math.cos(angle));
+// A full cam revolution lifts the claw quickly, lets the rollers take over,
+// then returns the claw while the same motor keeps turning in one direction.
+const clawStroke = phase => THREE.MathUtils.smoothstep(phase, .02, .42)
+  - THREE.MathUtils.smoothstep(phase, .55, .78);
+const grooveCenter = angle => {
+  const phase = (((angle - Math.PI) / TAU) % 1 + 1) % 1;
+  return .15 - .62 * clawStroke(phase);
+};
 
 function groovedBarrel(parent) {
   const part = group(parent, 0, camY, camZ);
@@ -349,45 +356,73 @@ export function createCameraProduct() {
   const mod = .052;
   const pitchCam = 20 * mod / 2;
   const pitchMotor = 14 * mod / 2;
-  const pitchOut = 18 * mod / 2;
   const motorY = camY + pitchCam + pitchMotor;
-  const middleY = camY - pitchCam - pitchOut;
   const camGear = gear(gears, gearX, camY, camZ, 20, mod, gearBlue);
   const motor = gear(gears, gearX, motorY, camZ, 14, mod, gearLight);
-  const middle = gear(gears, gearX, middleY, camZ, 18, mod, gearLight);
-  cylinder(gears, 1.18, motorY, camZ, .32, .54, bronze, 'x');
-  cylinder(gears, .946, motorY, camZ, .295, .079, black, 'x');
-  for (let i = 0; i < 5; i++) ring(gears, .98 + .082 * i, motorY, camZ, .319, .01, dark, 'x');
+  // The cutaway motor and shaft visibly feed both the cam and roller train.
+  const motorShell = bronze.clone();
+  motorShell.transparent = true; motorShell.opacity = .23; motorShell.depthWrite = false;
+  cylinder(gears, 1.07, motorY, camZ, .32, .58, motorShell, 'x');
+  cylinder(gears, .78, motorY, camZ, .295, .079, black, 'x');
+  cylinder(gears, 1.20, motorY, camZ, .07, 1.06, nickel, 'x');
+  const rotor = group(gears, 1.03, motorY, camZ);
+  cylinder(rotor, 0, 0, 0, .16, .42, nickel, 'x');
+  for (let i = 0; i < 3; i++) {
+    const angle = i * TAU / 3;
+    const coil = box(rotor, 0, .19 * Math.cos(angle), .19 * Math.sin(angle), .34, .10, .15, bronze);
+    coil.rotation.x = angle;
+  }
+  for (const sign of [-1, 1]) box(gears, 1.02, motorY + sign * .29, camZ, .45, .07, .26, dark);
 
-  // The roller transmission uses a small belt stage in this schematic.
   const rollerY = 4.063;
   const rollerZ = -.10;
-  const beltLowY = motorY;
-  const pulleyR = .243;
-  const beltX = gearX + .121;
-  const rollerPulley = group(gears, beltX, rollerY, rollerZ);
-  const motorPulley = group(gears, beltX, beltLowY, rollerZ);
-  for (const p of [rollerPulley, motorPulley]) {
-    cylinder(p, 0, 0, 0, pulleyR, .12, gearBlue, 'x');
-    cylinder(p, .072, 0, 0, .080, .053, nickel, 'x');
-  }
-  const belt = [];
-  for (let i = 0; i <= 12; i++) {
-    const angle = i * Math.PI / 12;
-    belt.push(new THREE.Vector3(beltX + .01, rollerY + pulleyR * Math.sin(angle), rollerZ + pulleyR * Math.cos(angle)));
-  }
-  for (let i = 0; i <= 12; i++) {
-    const angle = Math.PI + i * Math.PI / 12;
-    belt.push(new THREE.Vector3(beltX + .01, beltLowY + pulleyR * Math.sin(angle), rollerZ + pulleyR * Math.cos(angle)));
-  }
-  mesh(gears, new THREE.TubeGeometry(new THREE.CatmullRomCurve3(belt, true, 'centripetal'),
-    80, .036, 7, true), black);
-  cylinder(gears, beltX - .02, motorY, camZ - .071, .092, .21, nickel, 'x');
+  const rearZ = -.508;
+  const outputX = 1.72;
+  const motorOutput = gear(gears, outputX, motorY, camZ, 20, mod, gearBlue);
+  // Intersect the two pitch circles to place the idler: each tooth pair meets
+  // at precisely the sum of its pitch radii, even with the offset roller axis.
+  const radiusA = (20 + 18) * mod / 2;
+  const radiusB = (18 + 8) * mod / 2;
+  const dy = rollerY - motorY, dz = rollerZ - camZ;
+  const span = Math.hypot(dy, dz);
+  const along = (radiusA ** 2 - radiusB ** 2 + span ** 2) / (2 * span);
+  const offset = Math.sqrt(radiusA ** 2 - along ** 2);
+  const idlerY = motorY + along * dy / span - offset * dz / span;
+  const idlerZ = camZ + along * dz / span + offset * dy / span;
+  const rollerIdler = gear(gears, outputX, idlerY, idlerZ, 18, mod, gearLight);
+  const rollerInput = gear(gears, outputX, rollerY, rollerZ, 8, mod, gearBlue);
   const topRoller = roller(transport, rollerY, rollerZ, true);
-  const rearRoller = roller(transport, rollerY, -.508, false);
+  const rearRoller = roller(transport, rollerY, rearZ, false);
+  for (const rollerPart of [topRoller, rearRoller]) {
+    cylinder(rollerPart, 1.70, 0, 0, .065, .73, nickel, 'x');
+    // A broad blue end cap ties the rotating shaft visually to its blue gear.
+    cylinder(rollerPart, 1.30, 0, 0, .187, .10, gearBlue, 'x');
+  }
+  // Equal gears force the opposed rollers to have equal surface speeds.
+  const couplingX = 1.97;
+  const couplingModule = (rollerZ - rearZ) / 12;
+  const rollerCoupling = gear(gears, couplingX, rollerY, rollerZ, 12, couplingModule, gearBlue);
+  const rearCoupling = gear(gears, couplingX, rollerY, rearZ, 12, couplingModule, gearLight);
   for (const x of [-1.41, 1.41]) {
     panel(transport, .16, .50, .77, .072, bronze, x, rollerY, -.307, .022);
-    for (const z of [rollerZ, -.508]) cylinder(transport, x, rollerY, z, .216, .16, dark, 'x');
+    for (const z of [rollerZ, rearZ]) cylinder(transport, x, rollerY, z, .216, .16, dark, 'x');
+  }
+  camGear.name = 'camera-cam-gear';
+  motor.name = 'camera-motor-pinion';
+  motorOutput.name = 'camera-motor-output';
+  rollerIdler.name = 'camera-roller-idler';
+  rollerInput.name = 'camera-roller-input';
+  topRoller.name = 'camera-front-roller';
+  rearRoller.name = 'camera-rear-roller';
+  print.name = 'camera-film';
+  const nipGlow = box(transport, 0, rollerY, -.304, 2.31, .045, .025,
+    new THREE.MeshBasicMaterial({ color: 0xffd36c, transparent: true, opacity: 0, depthWrite: false }));
+  // Match tooth-to-gap phases as well as the tooth-count speed ratio.
+  function drivenAngle(a, b, teethA, teethB, rotationA) {
+    const y = b.position.y - a.position.y, z = b.position.z - a.position.z;
+    const bearingA = Math.atan2(y, -z);
+    const bearingB = Math.atan2(-y, z);
+    return (teethA * bearingA + teethB * bearingB - teethA * rotationA - Math.PI) / teethB;
   }
 
   const pivot = group(linkage, -.16, 2.195, .47);
@@ -415,20 +450,43 @@ export function createCameraProduct() {
     guideLine(root, 0x3873e6, group(camGear, -.06), group(barrel, 1.38)),
     guideLine(root, 0x9c63e9, group(pivot, 0, -lower, -.155), group(cams, -.20, camY, .37)),
     guideLine(root, 0xef9a37, group(pick, 0, .68, -.61), group(film, -1.04, .75, -.22)),
+    guideLine(root, 0x3873e6, group(rollerInput), group(topRoller, 1.72)),
+    guideLine(root, 0x3873e6, group(rearCoupling), group(rearRoller, 1.97)),
   ];
 
   const mechanismGroups = { gears, linkage, cam: cams };
   for (const container of Object.values(mechanismGroups)) container.traverse(part => {
     if (!part.material) return;
     part.material = Array.isArray(part.material) ? part.material.map(m => m.clone()) : part.material.clone();
+    for (const material of [part.material].flat()) {
+      material.userData.baseOpacity = material.opacity;
+      material.userData.baseTransparent = material.transparent;
+      material.userData.baseDepthWrite = material.depthWrite;
+    }
   });
+  const initialCenterY = filmBottom + 1.39;
+  const travelToNip = rollerY - (initialCenterY + 1.39);
+  const rockMin = reach * (-.31 / lower) + .14 * (1 - Math.sqrt(1 - (.31 / lower) ** 2));
+  const pickLift = slide => {
+    const swing = Math.asin(THREE.MathUtils.clamp((slide + .16) / lower, -.95, .95));
+    return -reach * Math.sin(swing) + .14 * (1 - Math.cos(swing)) - rockMin;
+  };
+  let low = .02, high = .42;
+  for (let i = 0; i < 40; i++) {
+    const mid = (low + high) / 2;
+    if (pickLift(.15 - .62 * clawStroke(mid)) < travelToNip) low = mid;
+    else high = mid;
+  }
+  const gripPhase = (low + high) / 2;
+  const rollerRatio = 20 / 14 * 20 / 8;
+  const filmTravelPerCycle = TAU * rollerRatio * .187;
   let lastFocus;
   const api = {
     root,
-    camera: [5.18, 4.55, 11.4],
-    target: [0, 2.92, -.05],
-    explodedCamera: [4.8, 5.82, 15.0],
-    explodedTarget: [.24, 2.83, 0],
+    camera: [6.9, 5.8, 11.2],
+    target: [0, 3.8, -.05],
+    explodedCamera: [4.8, 6.7, 15.0],
+    explodedTarget: [.24, 3.8, 0],
     labels,
     update(turn, explode = 0, focus = null) {
       for (const shell of shells) shell.material.opacity = .13 + .74 * explode;
@@ -437,42 +495,45 @@ export function createCameraProduct() {
           if (!part.material) return;
           for (const material of [part.material].flat()) {
             const dim = focus && name !== focus;
-            material.transparent = !!dim;
-            material.opacity = dim ? .2 : 1;
-            material.depthWrite = !dim;
+            material.transparent = !!dim || material.userData.baseTransparent;
+            material.opacity = material.userData.baseOpacity * (dim ? .2 : 1);
+            material.depthWrite = !dim && material.userData.baseDepthWrite;
           }
         });
         lastFocus = focus;
       }
       const phase = ((turn % 1) + 1) % 1;
-      // Drive, dwell while the rollers draw the sheet, then reset the claw.
-      const forward = THREE.MathUtils.smoothstep(phase, .04, .36);
-      const reset = THREE.MathUtils.smoothstep(phase, .73, .97);
-      const angular = -Math.PI / 2 + Math.PI * (forward - reset);
-      const motorAngular = angular * 20 / 14;
+      const driveProgress = THREE.MathUtils.smoothstep(phase, .04, .94);
+      const driveTurns = Math.floor(turn) + driveProgress;
+      const angular = -Math.PI / 2 - driveTurns * TAU;
       barrel.rotation.x = angular;
       camGear.rotation.x = angular;
-      middle.rotation.x = -angular * 20 / 18 + Math.PI / 2 + Math.PI / 18;
-      motor.rotation.x = -motorAngular + Math.PI / 2 + Math.PI / 14;
-      const rollerMotion = forward * 5.0 + THREE.MathUtils.smoothstep(phase, .31, .74) * 17;
-      rollerPulley.rotation.x = rollerMotion;
-      motorPulley.rotation.x = rollerMotion;
-      topRoller.rotation.x = -rollerMotion;
-      rearRoller.rotation.x = rollerMotion;
+      motor.rotation.x = drivenAngle(camGear, motor, 20, 14, angular);
+      rotor.rotation.x = motor.rotation.x;
+      motorOutput.rotation.x = motor.rotation.x;
+      rollerIdler.rotation.x = drivenAngle(motorOutput, rollerIdler, 20, 18, motorOutput.rotation.x);
+      rollerInput.rotation.x = drivenAngle(rollerIdler, rollerInput, 18, 8, rollerIdler.rotation.x);
+      rollerCoupling.rotation.x = rollerInput.rotation.x;
+      rearCoupling.rotation.x = drivenAngle(rollerCoupling, rearCoupling, 12, 12, rollerCoupling.rotation.x);
+      topRoller.rotation.x = rollerInput.rotation.x;
+      rearRoller.rotation.x = rearCoupling.rotation.x;
       const slide = grooveCenter(Math.PI / 2 - angular);
       const swing = Math.asin(THREE.MathUtils.clamp((slide + .16) / lower, -.95, .95));
       pivot.rotation.z = swing;
-      const rock = -reach * Math.sin(swing) + .14 * (1 - Math.cos(swing));
-      const rockMin = reach * (-.31 / lower) + .14 * (1 - Math.sqrt(1 - (.31 / lower) ** 2));
-      pick.position.y = rock - rockMin;
-      const exit = THREE.MathUtils.smoothstep(phase, .38, .78);
-      print.position.set(0, filmBottom + 1.39 + pick.position.y * .61 + exit * 2.65, -.304);
-      const dropped = THREE.MathUtils.smoothstep(phase, .77, .98);
-      print.position.x += -.39 * dropped;
+      pick.position.y = pickLift(slide);
+      // After the leading edge enters the nip, sheet motion is determined by
+      // the roller surface speed, not by a separate animation timer.
+      const caught = driveProgress >= gripPhase;
+      const filmLift = caught ? travelToNip + (driveProgress - gripPhase) * filmTravelPerCycle : pick.position.y;
+      print.position.set(0, initialCenterY + filmLift, -.304);
+      const clear = driveProgress > gripPhase + 2.78 / filmTravelPerCycle;
+      const dropped = THREE.MathUtils.smoothstep(driveProgress, gripPhase + 2.78 / filmTravelPerCycle + .015, 1);
+      print.position.x -= .39 * dropped;
       print.position.y += .22 * dropped;
       print.position.z += .35 * dropped;
       print.rotation.z = -.13 * dropped;
-      print.visible = phase < .96;
+      print.visible = phase < .97;
+      nipGlow.material.opacity = caught && !clear ? .62 : 0;
       body.front.position.set(-2.07 * explode, .24 * explode, .79 * explode);
       body.back.position.set(1.25 * explode, -.07 * explode, -2.49 * explode);
       body.frame.position.set(-1.82 * explode, .07 * explode, -1.51 * explode);

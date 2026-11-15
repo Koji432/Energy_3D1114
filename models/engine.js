@@ -87,6 +87,9 @@ export function createEngine() {
   const violet = surface(0x9c63e9, .42, .3);
   const steel = surface(0x87939f, .72, .26);
   const ceramic = surface(0xf1f3eb, .09, .37);
+  const intakeColor = new THREE.Color(0x5fd4ed);
+  const fireColor = new THREE.Color(0xff9c29);
+  const exhaustColor = new THREE.Color(0x9fabb6);
   const clear = new THREE.MeshPhysicalMaterial({ color: 0xb5d1df, metalness: .08, roughness: .17,
     transparent: true, opacity: .14, depthWrite: false, side: THREE.DoubleSide });
   const housing = group(root);
@@ -101,7 +104,7 @@ export function createEngine() {
   const bores = [-2.13, -.71, .71, 2.13];
   const phases = [0, Math.PI, Math.PI, 0];
   // Firing order 1-3-4-2. Each cylinder completes a cycle in two crank turns.
-  const cycleOffsets = [0, 3 * Math.PI, Math.PI, 2 * Math.PI];
+  const cycleOffsets = [0, Math.PI, 3 * Math.PI, 2 * Math.PI];
 
   box(housing, [6.1, .35, 1.8], graphite, [0, .31, 0]);
   box(housing, [5.65, .22, 1.48], cast, [0, .11, 0]);
@@ -126,12 +129,16 @@ export function createEngine() {
   }
 
   const crank = group(lower, [0, crankY, 0]);
+  crank.name = 'crankshaft';
   cylinder(crank, .15, 6.65, amber, [0, 0, 0], 'x');
   const cylinders = [];
   const valves = [];
   const camshafts = [-.62, .62].map(z => {
     const shaft = group(upper, [0, camY, z]);
+    shaft.name = z < 0 ? 'intake-camshaft' : 'exhaust-camshaft';
     cylinder(shaft, .105, 6.58, violet, [0, 0, 0], 'x');
+    // An off-axis stripe makes shaft rotation visible even between the lobes.
+    box(shaft, [6.25, .028, .035], ceramic, [0, .11, 0]);
     return shaft;
   });
 
@@ -166,6 +173,7 @@ export function createEngine() {
     cylinder(crank, .14, .67, steel,
       [x, throwRadius * Math.cos(phase), throwRadius * Math.sin(phase)], 'x');
     const piston = group(lower, [x, 0, 0]);
+    piston.name = `piston-${i + 1}`;
     cylinder(piston, .49, .61, silver, [0, .11, 0]);
     cylinder(piston, .45, .016, graphite, [0, .422, 0]);
     for (const y of [.25, .32, .39]) ring(piston, .486, .016, steel, [0, y, 0]);
@@ -176,9 +184,26 @@ export function createEngine() {
     const bore = add(housing, new THREE.CylinderGeometry(.525, .525, 1.67, 48, 1, true), clear, [x, 3.33, 0]);
     ring(housing, .535, .037, silver, [x, 4.15, 0]);
     ring(housing, .535, .028, cast, [x, 2.50, 0]);
-    const combustion = add(housing, new THREE.CylinderGeometry(.465, .465, .14, 40),
+    // The gas occupies only the space above the piston, expanding with the
+    // power stroke rather than flashing as an unrelated fixed cylinder.
+    const combustion = add(lower, new THREE.CylinderGeometry(.455, .455, 1, 40),
       new THREE.MeshBasicMaterial({ color: 0xffaa41, transparent: true, opacity: 0, depthWrite: false }), [x, 3.99, 0]);
-    cylinders.push({ piston, connection, bigEnd, x, phase, combustion, bore });
+    combustion.userData.dynamicOpacity = true;
+    const spark = add(head, new THREE.SphereGeometry(.10, 12, 8),
+      new THREE.MeshBasicMaterial({ color: 0xfff1a9, transparent: true, opacity: 0, depthWrite: false }), [x, 4.09, 0]);
+    const loadGlow = add(lower, new THREE.SphereGeometry(.10, 12, 8),
+      new THREE.MeshBasicMaterial({ color: 0xffdf86, transparent: true, opacity: .85, depthWrite: false }));
+    const flows = [-1, 1].map(sign => {
+      const curve = new THREE.CatmullRomCurve3([
+        new THREE.Vector3(x + .15, 3.77, sign * 1.37),
+        new THREE.Vector3(x, 4.04, sign * .90),
+        new THREE.Vector3(x, 4.05, sign * .30),
+        new THREE.Vector3(x, 3.92, sign * .15),
+      ]);
+      const material = new THREE.MeshBasicMaterial({ color: sign < 0 ? intakeColor : exhaustColor, transparent: true, opacity: .9, depthWrite: false });
+      return { curve, particles: Array.from({ length: 4 }, () => add(head, new THREE.SphereGeometry(.055, 8, 6), material)) };
+    });
+    cylinders.push({ piston, connection, bigEnd, x, phase, combustion, bore, spark, loadGlow, flows });
 
     for (const [side, z] of [-.62, .62].entries()) {
       const lobe = group(camshafts[side], [x, 0, 0]);
@@ -198,7 +223,7 @@ export function createEngine() {
       cylinder(valve, .17, .045, silver, [0, -.13, 0]);
       const spring = add(upper, springGeometry, steel, [x, 4.20, valveZ]);
       cylinder(head, .16, .10, cast, [x, 4.20, valveZ]);
-      valves.push({ valve, spring, lobe, rocker, sign });
+      valves.push({ valve, spring, lobe, rocker, sign, cylinder: i, side });
       // Port runners lead from the cylinder head to the manifolds.
       tube(head, [[x, 4.05, z], [x, 4.03, z * 1.9], [x + .15, 3.77, z * 2.2]], .13, side ? steel : graphite);
     }
@@ -221,6 +246,7 @@ export function createEngine() {
   const gearX = -3.38;
   const pitch = .30;
   const small = sprocket(timing, pitch, 20, blue, graphite, [gearX, crankY, 0]);
+  small.name = 'crank-timing-sprocket';
   const big = [-.62, .62].map(z => sprocket(timing, pitch * 2, 40, blue, graphite, [gearX, camY, z]));
   for (const z of [-.62, .62]) cylinder(upper, .085, .50, violet, [-3.2, camY, z], 'x');
   const track = chainTrack([{ y: crankY, z: 0, radius: pitch + .06 },
@@ -235,11 +261,14 @@ export function createEngine() {
     chainLinks.push(link);
   }
   const flywheel = group(lower, [3.43, crankY, 0]);
+  flywheel.name = 'output-flywheel';
   cylinder(flywheel, .78, .18, steel, [0, 0, 0], 'x');
   cylinder(flywheel, .58, .21, graphite, [0, 0, 0], 'x');
   for (let i = 0; i < 8; i++) {
     const a = i * TAU / 8;
     cylinder(flywheel, .045, .25, silver, [0, .46 * Math.cos(a), .46 * Math.sin(a)], 'x', 6);
+    const spoke = box(flywheel, [.24, .40, .07], amber, [0, .36 * Math.cos(a), .36 * Math.sin(a)]);
+    spoke.rotation.x = a;
   }
   const accessory = group(housing, [3.05, 2.0, -1.1]);
   cylinder(accessory, .37, .64, silver, [0, 0, 0], 'x');
@@ -254,12 +283,16 @@ export function createEngine() {
     if (!part.material) return;
     part.material = part.material.clone();
     part.userData.baseOpacity = part.material.opacity;
+    part.userData.baseTransparent = part.material.transparent;
+    part.userData.baseDepthWrite = part.material.depthWrite;
   });
   let lastFocus;
   const labels = { gears: group(timing, [gearX, 4.6, 1.4]),
     linkage: group(lower, [.71, 2.0, .45]), cam: group(upper, [1.6, camY, .62]) };
   const start = new THREE.Vector3();
   const end = new THREE.Vector3();
+  const cycle = Array(4).fill(0);
+  const activeLift = Array.from({ length: 4 }, () => [0, 0]);
   return {
     root, labels, camera: [-8.6, 6.8, 10.2], target: [0, 2.85, 0],
     explodedCamera: [-13.5, 10.8, 16.6], explodedTarget: [0, 3.0, 0],
@@ -280,25 +313,58 @@ export function createEngine() {
         end.set(part.x, pistonY, 0);
         connect(part.connection, start, end);
         part.bigEnd.position.set(part.x, pinY, pinZ);
-        const cycle = ((angle + cycleOffsets[i]) % (2 * TAU) + 2 * TAU) % (2 * TAU);
-        const ignition = Math.max(0, 1 - Math.abs(cycle - TAU - .1) / .25);
-        part.combustion.material.opacity = ignition * .65;
+        cycle[i] = ((angle + cycleOffsets[i]) % (2 * TAU) + 2 * TAU) % (2 * TAU);
+        const stroke = Math.floor(cycle[i] / Math.PI);
+        const progress = cycle[i] / Math.PI - stroke;
+        const power = stroke === 2 ? Math.sin(progress * Math.PI) : 0;
+        const ignition = Math.max(0, 1 - Math.abs(cycle[i] - TAU - .07) / .18);
+        const crown = pistonY + .462;
+        const chamberHeight = Math.max(.018, 4.10 - crown);
+        part.combustion.position.y = crown + chamberHeight / 2;
+        part.combustion.scale.y = chamberHeight;
+        part.combustion.material.color.copy(stroke < 2 ? intakeColor : stroke === 2 ? fireColor : exhaustColor);
+        part.combustion.material.opacity = explode > .1 ? 0 : stroke === 2 ? .25 + .35 * (1 - progress) : .13;
+        part.spark.material.opacity = ignition;
+        part.spark.scale.setScalar(.7 + ignition * 1.5);
+        part.connection.material.emissive.setHex(0xa4490a);
+        part.connection.material.emissiveIntensity = power * .9;
+        part.bigEnd.material.emissive.setHex(0xa4490a);
+        part.bigEnd.material.emissiveIntensity = power * .9;
+        part.loadGlow.visible = stroke === 2 && explode < .1;
+        part.loadGlow.position.copy(end).lerp(start, progress);
+        part.loadGlow.scale.setScalar(.7 + power * .65);
       });
-      valves.forEach(({ valve, spring, lobe, rocker, sign }) => {
+      valves.forEach(({ valve, spring, lobe, rocker, sign, cylinder: cylinderIndex, side }) => {
         const a = angle / 2 + lobe.rotation.x;
         let lowest = Infinity;
         for (const [y, z] of profile) lowest = Math.min(lowest, y * Math.cos(a) - z * Math.sin(a));
         const lift = Math.max(0, -lowest - .225);
+        activeLift[cylinderIndex][side] = lift;
         rocker.rotation.x = -sign * Math.asin(Math.min(.95, lift / .40));
         valve.position.y = 4.90 - lift * .72 / .40;
         spring.scale.y = Math.max(.10, valve.position.y - .17 - 4.20);
+        lobe.children[0].material.emissive.setHex(0x7131af);
+        lobe.children[0].material.emissiveIntensity = lift * 3;
+        rocker.children[0].material.emissive.setHex(0xa4490a);
+        rocker.children[0].material.emissiveIntensity = lift * 2;
       });
+      cylinders.forEach((part, i) => part.flows.forEach((flow, side) => {
+        const open = activeLift[i][side] > .012 && explode < .1;
+        flow.particles.forEach((particle, j) => {
+          particle.visible = open;
+          const travel = ((cycle[i] * 1.5 + j / flow.particles.length) % 1 + 1) % 1;
+          particle.position.copy(flow.curve.getPoint(side === 0 ? travel : 1 - travel));
+        });
+      }));
       for (const [i, link] of chainLinks.entries()) {
         const progress = ((i / linkCount + angle * (pitch + .06) / trackLength) % 1 + 1) % 1;
         const point = track.getPointAt(progress);
         const tangent = track.getTangentAt(progress);
         link.position.set(gearX, point.y, point.z);
         link.rotation.x = Math.atan2(tangent.z, tangent.y);
+        // Permanent lighter links can be followed from crank to both cams.
+        link.children[0].material.emissive.setHex(0x719fff);
+        link.children[0].material.emissiveIntensity = i % 11 < 2 ? .8 : 0;
       }
       timing.position.x = -2.0 * explode;
       lower.position.y = -.2 * explode;
@@ -311,9 +377,9 @@ export function createEngine() {
         for (const [name, object] of Object.entries(sets)) object.traverse(part => {
           if (!part.material) return;
           const dim = focus && name !== focus;
-          part.material.transparent = !!dim;
-          part.material.opacity = dim ? .19 : part.userData.baseOpacity;
-          part.material.depthWrite = !dim;
+          part.material.transparent = !!dim || part.userData.baseTransparent;
+          if (!part.userData.dynamicOpacity) part.material.opacity = dim ? .46 : part.userData.baseOpacity;
+          part.material.depthWrite = !dim && part.userData.baseDepthWrite;
         });
         lastFocus = focus;
       }

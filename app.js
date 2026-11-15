@@ -1,8 +1,8 @@
 import * as THREE from 'three';
 import { OrbitControls } from './vendor/OrbitControls.js';
-import { createMotion } from './models/motion.js?v=20261114-4';
-import { createMechanism } from './models/mechanisms.js?v=20261114-4';
-import { createBicycle, bicycleGears } from './models/bicycle.js?v=20261114-4';
+import { createMotion } from './models/motion.js?v=20261115-1';
+import { createMechanism } from './models/mechanisms.js?v=20261115-1';
+import { createBicycle, bicycleGears } from './models/bicycle.js?v=20261115-1';
 
 const pages = [
   { id: 'motion', title: '運動の種類' },
@@ -13,16 +13,17 @@ const pages = [
 const motionCards = [
   { id: 'carousel', title: '直線運動', subtitle: 'メリーゴーランドの馬の上下運動', icon: 'straight', accent: '#22795e', chip: '#e0f5ed', tint: '#e6f1ec' },
   { id: 'teacup', title: '回転運動', subtitle: 'ティーカップ', icon: 'rotate', accent: '#245fc6', chip: '#e6efff', tint: '#e8effa' },
-  { id: 'wiper', title: '揺動運動', subtitle: '車のワイパー', icon: 'sway', accent: '#a54d21', chip: '#fcece2', tint: '#f4ede7' },
+  { id: 'crank-rocker', title: '揺動運動・てこクランク', icon: 'sway', accent: '#a54d21', chip: '#fcece2', tint: '#f4ede7' },
 ];
 const mechanismCards = [
   { id: 'gears', title: '歯車', icon: 'gears', accent: '#3873e6', chip: '#e6efff', tint: '#e8effa' },
   { id: 'linkage', title: 'リンク機構', icon: 'logo', accent: '#ef9a37', chip: '#fff0dd', tint: '#f5efe7' },
   { id: 'cam', title: 'カム機構', icon: 'cam', accent: '#9c63e9', chip: '#f0e8ff', tint: '#eeeafa' },
+  { id: 'crank-rocker', title: 'てこクランク', icon: 'sway', accent: '#c97a2d', chip: '#fff0dd', tint: '#f5efe7' },
 ];
 const products = [
-  { id: 'car', title: 'エンジン', button: '車', icon: 'car', rate: .24, load: () => import('./models/car-engine.js?v=20261114-4').then(module => module.createCarEngine()) },
-  { id: 'camera', title: 'チェキのフィルム送り', button: 'チェキ', icon: 'camera', rate: .16, load: () => import('./models/camera.js?v=20261114-4').then(module => module.createCameraProduct()) },
+  { id: 'car', title: 'エンジン', button: '車', icon: 'car', rate: .24, load: () => import('./models/car-engine.js?v=20261115-1').then(module => module.createCarEngine()) },
+  { id: 'camera', title: 'チェキのフィルム送り', button: 'チェキ', icon: 'camera', rate: .16, load: () => import('./models/camera.js?v=20261115-1').then(module => module.createCameraProduct()) },
 ];
 
 const workspace = document.querySelector('#workspace');
@@ -161,12 +162,13 @@ function createView(element, model, title, rate, isProduct = false) {
   let directManipulation = !!manual;
   controls.enabled = !directManipulation;
   if (manual) canvas.style.touchAction = 'none';
+  let inspecting = false;
   function viewPose() {
     const open = isProduct && exploded;
     const detail = isProduct && extracted;
     const target = new THREE.Vector3(...(open && model.explodedTarget || detail && model.detailTarget || model.target));
     const position = new THREE.Vector3(...(open && model.explodedCamera || detail && model.detailCamera || model.camera));
-    const fit = isProduct ? Math.max(1, 1.48 / camera.aspect) : Math.max(1, .94 / camera.aspect);
+    const fit = isProduct ? Math.max(1, 1.48 / camera.aspect) : Math.max(1, (model.fitAspect || .94) / camera.aspect);
     position.sub(target).multiplyScalar(fit).add(target);
     const distance = position.distanceTo(target);
     controls.minDistance = distance * .48;
@@ -221,6 +223,11 @@ function createView(element, model, title, rate, isProduct = false) {
   }
   canvas.addEventListener('pointerdown', event => {
     if (!event.isPrimary || event.button !== 0 || pointerStart) return;
+    if (model.inspection?.weight > .001) {
+      model.cancelInspection?.();
+      resetView();
+      inspecting = false;
+    }
     pointerStart = { x: event.clientX, y: event.clientY, id: event.pointerId };
     pointerMoved = false;
     if (directManipulation) {
@@ -277,9 +284,10 @@ function createView(element, model, title, rate, isProduct = false) {
     if (!manual) return;
     const degrees = ((manualTurn * 360) % 720 + 720) % 720;
     if (input) input.value = degrees;
-    dial.style.setProperty('--angle', `${manualTurn * 360}deg`);
-    dial.setAttribute('aria-valuenow', Math.round(degrees));
-    dial.setAttribute('aria-valuetext', `${Math.round(degrees)}度`);
+    dial?.style.setProperty('--angle', `${manualTurn * 360}deg`);
+    dial?.setAttribute('aria-valuenow', Math.round(degrees));
+    dial?.setAttribute('aria-valuetext', `${Math.round(degrees)}度`);
+    canvas.setAttribute('aria-valuetext', `${Math.round(degrees)}度`);
   }
   input?.addEventListener('input', () => turnByHand(Number(input.value) / 360));
   let lastDialAngle = null;
@@ -314,6 +322,11 @@ function createView(element, model, title, rate, isProduct = false) {
   });
   canvas.addEventListener('keydown', event => {
     if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); expand(); return; }
+    if (directManipulation && event.key.startsWith('Arrow')) {
+      event.preventDefault();
+      turnByHand(manualTurn + (['ArrowLeft', 'ArrowDown'].includes(event.key) ? -1 : 1) / (12 * (model.dragResistance || 1)));
+      return;
+    }
     if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', '+', '-', '=', '0'].includes(event.key)) return;
     event.preventDefault();
     cameraGoal = null;
@@ -348,11 +361,24 @@ function createView(element, model, title, rate, isProduct = false) {
         if (camera.position.distanceToSquared(cameraGoal.position) < 1e-5 &&
             controls.target.distanceToSquared(cameraGoal.target) < 1e-5) cameraGoal = null;
       }
-      if (manual && running) {
+      if (manual && (running || (model.shifting && !pointerStart))) {
         manualTurn += delta * Number(speed.value) * rate;
         syncManual();
       }
-      model.update(manual ? manualTurn : time * rate, spread, isProduct ? focusPart : null, extraction);
+      model.update(manual ? manualTurn : time * rate, spread, isProduct ? focusPart : null, extraction, delta);
+      const inspection = model.inspection;
+      if (inspection?.weight > .001 && directManipulation && !reduceMotion.matches) {
+        const base = viewPose();
+        const nearTarget = new THREE.Vector3(...inspection.target);
+        const nearPosition = new THREE.Vector3(...inspection.camera);
+        nearPosition.sub(nearTarget).multiplyScalar(Math.max(1, 1.05 / camera.aspect)).add(nearTarget);
+        camera.position.copy(base.position).lerp(nearPosition, inspection.weight);
+        controls.target.copy(base.target).lerp(nearTarget, inspection.weight);
+        inspecting = true;
+      } else if (inspecting) {
+        resetView();
+        inspecting = false;
+      }
       controls.update();
       renderer.render(scene, camera);
     },
@@ -377,7 +403,7 @@ function clearViews() {
 function renderCards() {
   const isMotion = page === 'motion';
   const cards = isMotion ? motionCards : mechanismCards;
-  workspace.className = 'cards';
+  workspace.className = isMotion ? 'cards' : 'cards mechanism-cards';
   workspace.innerHTML = cards.map(card => `
     <article class="card" style="--tint:${card.tint};--accent:${card.accent};--chip:${card.chip}">
       <div class="card-header">
@@ -448,7 +474,7 @@ function renderProducts() {
       </div>
       <div class="view product-view"></div>
       <div class="parts" role="group" aria-label="機構を選択">
-        ${mechanismCards.map(part => `<button type="button" class="button part" data-part="${part.id}" style="--part-color:${part.accent}" aria-label="${part.title}" title="${part.title}">${icon(part.icon)}</button>`).join('')}
+        ${mechanismCards.filter(part => part.id !== 'crank-rocker').map(part => `<button type="button" class="button part" data-part="${part.id}" style="--part-color:${part.accent}" aria-label="${part.title}" title="${part.title}">${icon(part.icon)}</button>`).join('')}
       </div>
     </article>`;
   workspace.querySelector('.product').addEventListener('click', event => {
@@ -491,30 +517,31 @@ function renderProducts() {
 
 function renderBicycle() {
   workspace.className = '';
+  const sprocket = teeth => {
+    const radius = teeth * .48;
+    const points = Array.from({ length: 48 }, (_, i) => {
+      const a = i * Math.PI / 24;
+      const r = radius + (i % 4 < 2 ? 2 : 0);
+      return `${24 + Math.cos(a) * r},${24 + Math.sin(a) * r}`;
+    }).join(' ');
+    return `<svg viewBox="0 0 48 48" class="sprocket-choice" aria-hidden="true"><polygon points="${points}"/><circle cx="24" cy="24" r="3"/></svg>`;
+  };
   workspace.innerHTML = `<article class="product bicycle" style="--accent:#3873e6;--chip:#e6efff">
     <div class="product-bar">
-      <span class="gear-equation" aria-label="前の歯数42">${icon('gears')}42T</span>
       <div class="segment" role="group" aria-label="後ろのギアを選択">
-        ${bicycleGears.map((teeth,i) => `<button class="button" data-gear="${i}" aria-label="後ろ${teeth}歯" aria-pressed="${i===0}">${teeth}T</button>`).join('')}
+        ${bicycleGears.map((teeth,i) => `<button class="button" data-gear="${i}" aria-label="${['大きいギア・軽い','中くらいのギア','小さいギア・重い'][i]}" aria-pressed="${i===0}">${sprocket(teeth)}</button>`).join('')}
       </div>
     </div>
     <div class="view product-view">${viewResetButton()}</div>
-    <div class="manual-control bicycle-control">
-      <div class="handwheel" role="slider" tabindex="0" aria-label="ペダルを手で回す" aria-valuemin="0" aria-valuemax="720" aria-valuenow="0"><span></span></div>
-      <div class="gear-metric" title="同じ車輪負荷に必要なペダルの力">${icon('force')}<meter id="effort-meter" min="0" max="2.5" value="1" aria-label="必要な力"></meter><output id="effort">1.00×</output></div>
-      <div class="gear-metric" title="ペダル1回転あたりの車輪回転数">${icon('speed')}<meter id="speed-meter" min="0" max="3" value="1.24" aria-label="車輪の速さ"></meter><output id="wheel-rate">1.24×</output></div>
-    </div>
+    <div class="manual-control bicycle-control sr-only"><input type="range" min="0" max="720" step="1" value="0" aria-label="ペダルの回転角度"></div>
   </article>`;
   const model = createBicycle();
   createView(workspace.querySelector('.view'), model, '自転車', .28);
   workspace.querySelectorAll('[data-gear]').forEach(button => button.addEventListener('click', () => {
     const scope = expandedArticle || workspace;
-    model.setGear(Number(button.dataset.gear));
+    model.setGear(Number(button.dataset.gear), !reduceMotion.matches);
     scope.querySelectorAll('[data-gear]').forEach(other => other.setAttribute('aria-pressed',String(other===button)));
-    scope.querySelector('#effort').textContent = `${model.dragResistance.toFixed(2)}×`;
-    scope.querySelector('#wheel-rate').textContent = `${model.ratio.toFixed(2)}×`;
-    scope.querySelector('#effort-meter').value = model.dragResistance;
-    scope.querySelector('#speed-meter').value = model.ratio;
+    scope.querySelector('canvas').setAttribute('aria-description', `前42歯、後ろ${bicycleGears[Number(button.dataset.gear)]}歯。ペダル1回転で車輪${model.targetRatio.toFixed(2)}回転。`);
   }));
 }
 

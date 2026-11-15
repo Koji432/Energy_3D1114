@@ -1,5 +1,5 @@
 import * as THREE from '../vendor/three.module.js';
-import { createEngine } from './engine.js?v=20261114-4';
+import { createEngine } from './engine.js?v=20261115-1';
 
 export function createCarEngine() {
   const root = new THREE.Group();
@@ -12,6 +12,9 @@ export function createCarEngine() {
   const transparentHood = glass.clone();
   transparentHood.opacity = .09;
   const light = new THREE.MeshStandardMaterial({ color: 0xeaf4ff, emissive: 0x779dbb, emissiveIntensity: .45 });
+  const driveBlue = new THREE.MeshStandardMaterial({ color: 0x3873e6, metalness: .45, roughness: .3 });
+  const driveAmber = new THREE.MeshStandardMaterial({ color: 0xef9a37, metalness: .45, roughness: .3 });
+  const frontWheels = [];
   function box(parent, w, h, d, x, y, z, material) {
     const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), material);
     mesh.position.set(x,y,z); parent.add(mesh); return mesh;
@@ -23,12 +26,15 @@ export function createCarEngine() {
     mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),end.sub(start).normalize());
     car.add(mesh); return mesh;
   }
-  box(car, 3.0,.20,5.7,0,.57,0,rubber);
+  box(car, 3.0,.20,3.65,0,.57,-1.025,rubber);
+  // The front floor is cut away so the engine output and drive shafts remain visible.
+  box(car, 3.0,.06,2.05,0,.48,1.825,transparentHood);
   for(const sign of [-1,1]) {
     box(car,.22,.64,5.4,sign*1.48,.94,0,paint);
     box(car,.12,.09,4.9,sign*1.61,.65,0,metal);
     for(const z of [-1.85,1.72]) {
       const wheel = new THREE.Group(); wheel.position.set(sign*1.50,.60,z); car.add(wheel);
+      if(z > 0) frontWheels.push(wheel);
       const tire = new THREE.Mesh(new THREE.CylinderGeometry(.59,.59,.34,56),rubber);
       tire.rotation.z=Math.PI/2;wheel.add(tire);
       const hub = new THREE.Mesh(new THREE.CylinderGeometry(.39,.39,.36,48),metal);
@@ -37,6 +43,10 @@ export function createCarEngine() {
         const a=i*Math.PI*2/5;
         const spoke=box(wheel,.38,.09,.58,0,0,0,rubber);
         spoke.rotation.x=a;
+      }
+      if(z > 0) {
+        const marker=box(wheel,.395,.08,.12,0,.45,0,driveBlue);
+        marker.name='driven-wheel-marker';
       }
     }
     box(car,.63,.14,.08,sign*.98,1.10,2.8,light);
@@ -65,6 +75,31 @@ export function createCarEngine() {
     box(car,.65,.12,.62,x,.98,-.45,rubber);
   }
 
+  // A cutaway final-drive stage shows the path to the front axle. Two external
+  // gears reverse direction and reduce speed 2:1; straight travel means both
+  // front half-shafts turn together. This is a simplified transaxle view.
+  function axleGear(radius, teeth, y) {
+    const wheel=new THREE.Group();wheel.position.set(.88,y,1.72);car.add(wheel);
+    const disc=new THREE.Mesh(new THREE.CylinderGeometry(radius-.018,radius-.018,.075,40),driveBlue);
+    disc.rotation.z=Math.PI/2;wheel.add(disc);
+    for(let i=0;i<teeth;i++) {
+      const angle=i*Math.PI*2/teeth;
+      const tooth=box(wheel,.08,.04,.027,0,radius*Math.cos(angle),radius*Math.sin(angle),driveBlue);
+      tooth.rotation.x=angle;
+    }
+    return wheel;
+  }
+  const inputGear=axleGear(.09,12,.7245);
+  const outputGear=axleGear(.18,24,.4545);
+  rod([.63,.7245,1.72],[1.01,.7245,1.72],.038,driveAmber);
+  rod([-1.15,.4545,1.72],[1.15,.4545,1.72],.045,driveAmber);
+  for(const sign of [-1,1]) {
+    rod([sign*1.15,.4545,1.72],[sign*1.50,.60,1.72],.045,driveAmber);
+    const joint=new THREE.Mesh(new THREE.SphereGeometry(.075,12,8),metal);
+    joint.position.set(sign*1.15,.4545,1.72);car.add(joint);
+  }
+  const axleMarker=box(car,2.25,.025,.025,0,.5025,1.72,driveBlue);
+
   const engine = createEngine();
   root.add(engine.root);
   const source = new THREE.Vector3(0,.51,1.72);
@@ -84,6 +119,14 @@ export function createCarEngine() {
       engine.root.position.y += Math.sin(Math.PI*amount)*1.3;
       car.position.set(-5.2*amount,0,-2.8*amount);
       engine.update(turn,explode*amount,focus);
+      inputGear.rotation.x=turn*Math.PI*2;
+      outputGear.rotation.x=-turn*Math.PI+Math.PI/24;
+      frontWheels.forEach(wheel=>{wheel.rotation.x=-turn*Math.PI;});
+      // The offset stripe travels around the axle, showing the same output
+      // angle as the wheels rather than an unrelated free-spinning cylinder.
+      axleMarker.position.y=.4545+.048*Math.cos(-turn*Math.PI);
+      axleMarker.position.z=1.72+.048*Math.sin(-turn*Math.PI);
+      axleMarker.rotation.x=-turn*Math.PI;
       line.visible=amount>.025;
       const a=source.clone().add(car.position);
       const b=engine.root.position.clone().add(new THREE.Vector3(0,1.1*scale,0));

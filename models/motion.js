@@ -1,4 +1,5 @@
 import * as THREE from '../vendor/three.module.js';
+import { createMechanism } from './mechanisms.js?v=20261115-1';
 
 const tau = 2 * Math.PI;
 const vector = coordinates => new THREE.Vector3(...coordinates);
@@ -387,7 +388,7 @@ function carWiper() {
   return { root, update, camera: [3.35, 3.88, 6.81], target: [0, 0.96, 0.13] };
 }
 
-const models = { carousel, teacup: teacupRide, wiper: carWiper };
+const models = { carousel, teacup: teacupRide, wiper: carWiper, 'crank-rocker': () => createMechanism('crank-rocker') };
 
 export function createMotion(id) {
   return models[id]();

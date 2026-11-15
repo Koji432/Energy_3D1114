@@ -211,14 +211,15 @@ function positionStrap(strapPart, a, b, z) {
   strapPart.rotation.z = Math.atan2(b.y - a.y, b.x - a.x);
 }
 
-function linkage() {
+function crankRocker() {
   const root = new THREE.Group();
-  const drive = new THREE.Vector2(-1.66, 1.09);
-  const pivot = new THREE.Vector2(1.55, .91);
-  const crankRadius = .56;
-  const couplerLength = 2.9;
-  const rockerLength = 1.52;
-  base(root, 4.84, palette.gold);
+  root.name = 'crank-rocker';
+  const drive = new THREE.Vector2(-1.55, 1.23);
+  const pivot = new THREE.Vector2(1.55, 1.23);
+  const crankRadius = .70;
+  const couplerLength = 2.70;
+  const rockerLength = 1.50;
+  base(root, 5.20, palette.gold);
   pedestal(root, drive.x, drive.y, .36);
   pedestal(root, pivot.x, pivot.y, .36);
   disc(root, .41, .13, palette.bronze, drive.x, drive.y, .14);
@@ -227,6 +228,9 @@ function linkage() {
   const crank = strap(root, crankRadius, .38, .22, palette.gold);
   const rocker = strap(root, rockerLength, .38, .22, palette.gold);
   const coupler = strap(root, couplerLength, .30, .19, palette.cream);
+  crank.name = 'input-crank';
+  rocker.name = 'output-rocker';
+  coupler.name = 'coupler';
   for (const point of [drive, pivot]) {
     disc(root, .139, .116, palette.steel, point.x, point.y, .44);
     disc(root, .057, .026, palette.foot, point.x, point.y, .507);
@@ -240,11 +244,19 @@ function linkage() {
     disc(pin, .044, .015, palette.foot, 0, 0, .269);
   }
   const path = new THREE.MeshBasicMaterial({ color: 0xce8a34 });
-  arcArrow(root, drive.x, drive.y, .02, .82, 2.45, 3.93, path, .023);
+  arcArrow(root, drive.x, drive.y, -.04, .96, .48, 5.60, path, .023);
+  // The rocker only sweeps between its two dead-centre positions.
+  const lowAngle = Math.acos((3.1 ** 2 + rockerLength ** 2 - (couplerLength + crankRadius) ** 2) / (2 * 3.1 * rockerLength));
+  const highAngle = Math.acos((3.1 ** 2 + rockerLength ** 2 - (couplerLength - crankRadius) ** 2) / (2 * 3.1 * rockerLength));
+  const minAngle = Math.PI - lowAngle;
+  const maxAngle = Math.PI - highAngle;
+  const middle = (minAngle + maxAngle) / 2;
+  arcArrow(root, pivot.x, pivot.y, .12, 1.78, middle, minAngle, path, .026);
+  arcArrow(root, pivot.x, pivot.y, .12, 1.78, middle, maxAngle, path, .026);
   const fixedEnd = new THREE.Vector2();
   const movingEnd = new THREE.Vector2();
   return {
-    root, camera: [1.55, 3.06, 8.9], target: [0, 1.39, 0], drivePoint: [drive.x, drive.y, .55],
+    root, camera: [1.15, 3.35, 9.6], target: [0, 1.53, 0], drivePoint: [drive.x, drive.y, .55],
     update(turn) {
       const angle = turn * TAU + Math.PI / 2;
       fixedEnd.set(drive.x + crankRadius * Math.cos(angle), drive.y + crankRadius * Math.sin(angle));
@@ -260,6 +272,71 @@ function linkage() {
       positionStrap(coupler, fixedEnd, movingEnd, .55);
       crankPin.position.set(fixedEnd.x, fixedEnd.y, .43);
       rockerPin.position.set(movingEnd.x, movingEnd.y, .43);
+    },
+  };
+}
+
+// A slider-crank keeps the fourth link in a straight guide. This makes its
+// reciprocating output visibly different from the separate crank-rocker.
+function linkage() {
+  const root = new THREE.Group();
+  root.name = 'slider-crank';
+  const drive = new THREE.Vector2(-1.75, 1.33);
+  const crankRadius = .72;
+  const rodLength = 2.60;
+  base(root, 5.80, palette.gold);
+  pedestal(root, drive.x, drive.y, .36);
+  const flywheel = groupAt(root, drive.x, drive.y, .14);
+  disc(flywheel, .60, .12, palette.bronze);
+  ring(flywheel, .49, .022, palette.cream, 0, 0, .074);
+  disc(flywheel, .058, .02, palette.white, .47, 0, .09);
+  // The fixed rails constrain the bronze carriage to a horizontal path.
+  for (const x of [-.32, 2.17]) {
+    box(root, .25, .68, .72, palette.frame, x, .62, -.12);
+    box(root, .28, .75, .18, palette.frame, x, 1.34, -.20);
+  }
+  for (const y of [1.02, 1.64]) {
+    box(root, 2.82, .075, .12, palette.steel, .925, y, .27);
+  }
+  const slider = groupAt(root, 0, drive.y, .31);
+  slider.name = 'output-slider';
+  extrude(slider, roundRect(.54, .67, .07), .32, palette.gold);
+  box(slider, .31, .44, .02, palette.bronze, 0, 0, .17);
+  const crank = strap(root, crankRadius, .34, .20, palette.gold);
+  crank.name = 'input-crank';
+  const rod = strap(root, rodLength, .28, .18, palette.cream);
+  rod.name = 'coupler';
+  const crankPin = groupAt(root);
+  const sliderPin = groupAt(root);
+  for (const pin of [crankPin, sliderPin]) {
+    disc(pin, .082, .39, palette.inner);
+    disc(pin, .13, .075, palette.steel, 0, 0, .20);
+    disc(pin, .044, .02, palette.foot, 0, 0, .25);
+  }
+  disc(root, .137, .12, palette.steel, drive.x, drive.y, .44);
+  disc(root, .051, .025, palette.foot, drive.x, drive.y, .51);
+  const cue = new THREE.MeshBasicMaterial({ color: 0xce8a34 });
+  arcArrow(root, drive.x, drive.y, -.02, .99, .45, 5.7, cue, .022);
+  box(root, 1.22, .025, .025, cue, .85, 1.96, .08);
+  for (const direction of [-1, 1]) {
+    const arrow = mesh(root, new THREE.ConeGeometry(.075, .16, 14), cue, .85 + direction * .69, 1.96, .08);
+    arrow.rotation.z = -direction * Math.PI / 2;
+  }
+  const crankEnd = new THREE.Vector2();
+  const slideEnd = new THREE.Vector2();
+  return {
+    root, camera: [1.15, 3.28, 10.2], target: [0, 1.22, 0], drivePoint: [drive.x, drive.y, .55],
+    update(turn) {
+      const angle = turn * TAU + Math.PI / 2;
+      crankEnd.set(drive.x + crankRadius * Math.cos(angle), drive.y + crankRadius * Math.sin(angle));
+      const vertical = crankEnd.y - drive.y;
+      slideEnd.set(crankEnd.x + Math.sqrt(rodLength ** 2 - vertical ** 2), drive.y);
+      flywheel.rotation.z = angle;
+      positionStrap(crank, drive, crankEnd, .33);
+      positionStrap(rod, crankEnd, slideEnd, .55);
+      slider.position.x = slideEnd.x;
+      crankPin.position.set(crankEnd.x, crankEnd.y, .43);
+      sliderPin.position.set(slideEnd.x, slideEnd.y, .43);
     },
   };
 }
@@ -359,7 +436,7 @@ function cam() {
 }
 
 export function createMechanism(id) {
-  const build = { gears, linkage, cam }[id];
+  const build = { gears, linkage, cam, 'crank-rocker': crankRocker }[id];
   if (!build) throw new RangeError(`Unknown mechanism: ${id}`);
   const mechanism = build();
   mechanism.update(0);
