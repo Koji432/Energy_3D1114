@@ -5,9 +5,26 @@ import { createPrintedEngine } from '../models/printed-engine.js';
 import { createCarEngine } from '../models/car-engine.js';
 
 const originalFetch = globalThis.fetch;
-globalThis.fetch = async url => new Response(await readFile(url));
+const attempts = new Map();
+let active = 0, peak = 0;
+globalThis.fetch = async url => {
+  const name = url.pathname.split('/').at(-1);
+  attempts.set(name, (attempts.get(name) || 0) + 1);
+  if (name === 'engineblock-1x.stl' && attempts.get(name) === 1) throw new TypeError('Temporary network failure');
+  peak = Math.max(peak, ++active);
+  try { return new Response(await readFile(url)); }
+  finally { active--; }
+};
 let model;
-try { model = await createPrintedEngine(); }
+try {
+  model = await createPrintedEngine();
+  assert.equal(attempts.get('engineblock-1x.stl'), 2, 'A failed download must recover automatically');
+  assert.equal(attempts.size, 14, 'All source parts must be loaded');
+  assert.ok(peak <= 4, 'Concurrent downloads must stay bounded');
+  const before = [...attempts.values()].reduce((a,b)=>a+b,0);
+  await createPrintedEngine();
+  assert.equal([...attempts.values()].reduce((a,b)=>a+b,0), before, 'A repeated selection must reuse downloaded sources');
+}
 finally { globalThis.fetch = originalFetch; }
 
 const parts = model.root.children.filter(part => part.isGroup);
@@ -65,4 +82,4 @@ for (let step=0;step<=144;step++) {
   assert.equal(driven[0].parent.rotation.x,driven[1].parent.rotation.x,'Straight-ahead wheels must agree');
   car.root.traverse(object=>assert.ok(object.matrixWorld.elements.every(Number.isFinite)));
 }
-console.log('PASS: 28 parts, 721 assembled joint poses, original stroke/TDC, exploded transforms, printed crank driving the car wheels');
+console.log('PASS: download retry/cache, 28 parts, 721 joint poses, stroke/TDC, explosion, printed crank driving the car wheels');

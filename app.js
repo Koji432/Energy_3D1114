@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from './vendor/OrbitControls.js';
-import { createMotion } from './models/motion.js?v=20261116-2';
-import { createMechanism } from './models/mechanisms.js?v=20261116-2';
+import { createMotion } from './models/motion.js?v=20261116-3';
+import { createMechanism } from './models/mechanisms.js?v=20261116-3';
 
 const pages = [
   { id: 'motion', title: '運動の種類' },
@@ -20,8 +20,8 @@ const mechanismCards = [
   { id: 'cam', title: 'カム機構', icon: 'cam', accent: '#9c63e9', chip: '#f0e8ff', tint: '#eeeafa' },
 ];
 const products = [
-  { id: 'car', title: '車のエンジンの基礎', icon: 'car', rate: .18, load: () => import('./models/car-engine.js?v=20261116-2').then(module => module.createCarEngine()) },
-  { id: 'camera', title: 'チェキのフィルム送り', button: 'チェキ', icon: 'camera', rate: .16, load: () => import('./models/camera.js?v=20261116-2').then(module => module.createCameraProduct()) },
+  { id: 'car', title: '車のエンジンの基礎', icon: 'car', rate: .18, load: () => import('./models/car-engine.js?v=20261116-3').then(module => module.createCarEngine()) },
+  { id: 'camera', title: 'チェキのフィルム送り', button: 'チェキ', icon: 'camera', rate: .16, load: () => import('./models/camera.js?v=20261116-3').then(module => module.createCameraProduct()) },
 ];
 
 const workspace = document.querySelector('#workspace');
@@ -102,10 +102,19 @@ function disposeModel(root) {
   for (const resource of resources) resource.dispose();
 }
 
-function showViewError(element, message) {
+function showViewError(element, message, retry) {
   const notice = document.createElement('div');
   notice.className = 'view-error';
   notice.textContent = message;
+  if (retry) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'button compact';
+    button.innerHTML = icon('reset');
+    button.setAttribute('aria-label', '3Dモデルを再読み込み');
+    button.addEventListener('click', retry, { once: true });
+    notice.append(button);
+  }
   element.append(notice);
 }
 
@@ -403,7 +412,6 @@ function renderCards() {
 
 function syncProducts() {
   const scope = expandedArticle || workspace;
-  scope.querySelector('[data-source]')?.toggleAttribute('hidden', product.id !== 'car');
   scope.querySelector('[data-extract]')?.toggleAttribute('hidden', product.id !== 'car');
   scope.querySelector('[data-extract]')?.setAttribute('aria-pressed', String(extracted));
   scope.querySelectorAll('[data-product]').forEach(button => {
@@ -424,6 +432,11 @@ async function showProduct() {
   syncProducts();
   const element = (expandedArticle || workspace).querySelector('.product-view');
   element.innerHTML = viewResetButton();
+  const loading = document.createElement('div');
+  loading.className = 'view-loading';
+  loading.setAttribute('role', 'status');
+  loading.setAttribute('aria-label', '3Dモデルを読み込み中');
+  element.append(loading);
   const current = product;
   try {
     const model = await current.load();
@@ -431,11 +444,13 @@ async function showProduct() {
       disposeModel(model.root);
       return;
     }
+    loading.remove();
     createView(element, model, current.title, current.rate, true);
   } catch (error) {
     if (selectionVersion !== version) return;
     console.error(error);
-    showViewError(element, '3Dモデルを読み込めませんでした。');
+    loading.remove();
+    showViewError(element, '3Dモデルを読み込めませんでした。', showProduct);
   }
 }
 
@@ -448,7 +463,6 @@ function renderProducts() {
           ${products.map(item => `<button type="button" class="button" data-product="${item.id}" aria-label="${item.title}" title="${item.title}">${icon(item.icon)}</button>`).join('')}
         </div>
         <div class="view-modes segment" role="group" aria-label="表示">
-          <a class="button" data-source href="./assets/printed-engine/README.txt" target="_blank" rel="noopener" aria-label="モデルの出典と作者" title="WhopperPrinting · CC BY-NC-ND 4.0">${icon('info')}</a>
           <button type="button" class="button" data-extract aria-label="エンジンを取り出す・車全体に戻す" title="エンジンを取り出す・車全体に戻す">${icon('engine')}</button>
           <button type="button" class="button" data-explode="false" aria-label="組み立て" title="組み立て">${icon('product')}</button>
           <button type="button" class="button" data-explode="true" aria-label="分解" title="分解">${icon('explode')}</button>

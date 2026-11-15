@@ -1,6 +1,6 @@
 import * as THREE from '../vendor/three.module.js';
 
-// Original, unmodified print meshes by WhopperPrinting. See the asset README.
+// Original, unmodified print meshes by WhopperPrinting. See the repository README.
 // Dimensions below are in the STL's millimetres; the display scale is applied
 // to the complete assembly, never to individual parts.
 export const dimensions = Object.freeze({
@@ -19,10 +19,32 @@ export function enginePose(turn) {
   return { angle, pinX, pinY, pistonY: pinY + rise, rodAngle: -Math.atan2(-pinX, rise) };
 }
 
+const sourceBuffers = new Map();
+async function fetchPart(name) {
+  let failure;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 12000);
+    try {
+      const response = await fetch(new URL(`../assets/printed-engine/${name}.stl`, import.meta.url),
+        { signal: controller.signal, cache: 'force-cache' });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      return await response.arrayBuffer();
+    } catch (error) {
+      failure = error;
+    } finally {
+      clearTimeout(timer);
+    }
+    if (attempt < 2) await new Promise(resolve => setTimeout(resolve, 250 * (attempt + 1)));
+  }
+  throw new Error(`Engine part ${name}: ${failure.message}`, { cause: failure });
+}
+
 async function readMesh(name) {
-  const response = await fetch(new URL(`../assets/printed-engine/${name}.stl`, import.meta.url));
-  if (!response.ok) throw new Error(`Engine part ${name}: ${response.status}`);
-  const buffer = await response.arrayBuffer();
+  if (!sourceBuffers.has(name)) {
+    sourceBuffers.set(name, fetchPart(name).catch(error => { sourceBuffers.delete(name); throw error; }));
+  }
+  const buffer = await sourceBuffers.get(name);
   const data = new DataView(buffer);
   const count = data.getUint32(80, true);
   if (84 + count * 50 !== buffer.byteLength) throw new Error(`Invalid STL: ${name}`);
@@ -59,7 +81,20 @@ export async function createPrintedEngine() {
   const names = ['engineblock-1x', 'handlecasing-1x', 'endcasing-1x', 'weight1-1x', 'weight2-1x',
     'head-1x', 'connectingrod-1x', 'rod-1x', 'washer-4x', 'rod-bolt-2x', 'bolt-9x',
     'pistonbolt-1x', 'nut-3x', 'handle-1x'];
-  const meshes = Object.fromEntries(await Promise.all(names.map(readMesh)));
+  // Limit concurrent downloads, and reuse source data when switching products.
+  const meshes = {};
+  let cursor = 0;
+  const results = await Promise.allSettled(Array.from({ length: 4 }, async () => {
+    while (cursor < names.length) {
+      const [name, geometry] = await readMesh(names[cursor++]);
+      meshes[name] = geometry;
+    }
+  }));
+  const failed = results.find(result => result.status === 'rejected');
+  if (failed) {
+    Object.values(meshes).forEach(geometry => geometry.dispose());
+    throw failed.reason;
+  }
   const root = new THREE.Group();
   root.scale.setScalar(.035);
   const plastic = color => new THREE.MeshStandardMaterial({ color, roughness: .67, metalness: .03 });

@@ -16,7 +16,7 @@
 
 - [前作 Energy_3D1024](https://github.com/Koji432/Energy_3D1024)
 - てこクランク — [広島大学の機構教材](https://www.hiroshima-u.ac.jp/system/files/76944/bulletin2016-8.pdf)。入力の連続回転を出力の往復する揺動に変換します。
-- 原動機 — WhopperPrinting, [Single Piston Engine - Fully Printed Buildable Kit (With Printed Screwdriver!)](https://www.printables.com/model/514776-single-piston-engine-fully-printed-buildable-kit-w), [CC BY-NC-ND 4.0](https://creativecommons.org/licenses/by-nc-nd/4.0/)。作者が公開する14種類のSTLを形状変更せず収録し、実物と対応する部品を表示します。[出典・ライセンス](assets/printed-engine/README.txt)、[ファイル照合用SHA-256](assets/printed-engine/SHA256SUMS.txt)。
+- 原動機 — WhopperPrinting, [Single Piston Engine - Fully Printed Buildable Kit (With Printed Screwdriver!)](https://www.printables.com/model/514776-single-piston-engine-fully-printed-buildable-kit-w), [CC BY-NC-ND 4.0](https://creativecommons.org/licenses/by-nc-nd/4.0/)。作者が公開する14種類のSTLを形状変更せず収録し、実物と対応する部品を表示します。[ファイル照合用SHA-256](assets/printed-engine/SHA256SUMS.txt)。
 - 車での使われ方 — [工学院大学・内燃機関研究室のピストン－クランク機構教材](https://www.ns.kogakuin.ac.jp/ice-lab/basic3.html)。単気筒模型のピストン、連接棒、クランクを中心に、変速機・最終減速機、前輪へ動きが伝わる関係を示します。前進時の駆動系は、2回の歯車のかみ合いと全体2:1の減速を使った教材用の模式表示です。特定車種の設計図や歯数を再現したものではありません。
 - チェキの模式モデル — [instax mini Evo Cinema の製品情報](https://www.fujifilm.com/jp/ja/news/list/13230)、[富士写真フイルムのフィルム送り機構の特許](https://patents.google.com/patent/US20020051636A1/en)。外観と機構の参照資料を組み合わせています。
 - ローラー駆動 — [富士フイルムの歯車列の特許](https://patents.google.com/patent/US6356712B1/en)。モーター、複合歯車、中間歯車、ローラーの軸を接続し、フィルムの移動をローラーの外周速度と同期させています。歯数は教材用の模式値です。
@@ -25,7 +25,7 @@
 
 これは作者の手回し式スライダクランク模型です。単気筒模型そのものには、実物にない歯車、カム、バルブや燃焼表現は加えていません。クランク半径17 mm、連接棒の軸間約80.8843 mm、行程34 mmを元の軸穴から計測し、回転角に対して連接棒の長さが変わらない幾何計算で動かします。ピストン上死点で冠面が本体上端に一致します。
 
-表示する組立位置は元の形状の軸穴、支持面と作者の完成写真から合わせています。印刷の収縮、ねじの締め込み量や個々の実物の隙間を再現するものではありません。原本STLは変更せず、画面内で部品の配置・回転・表示色を設定しています。利用者の指定に従い、表示用メッシュだけ側面の浅い文字の凹凸を平面化しています。原作者と出典はこの文書および出典リンクに記載しています。リンク機構はオレンジ、チェキの歯車は青、カムは紫です。
+表示する組立位置は元の形状の軸穴、支持面と作者の完成写真から合わせています。印刷の収縮、ねじの締め込み量や個々の実物の隙間を再現するものではありません。原本STLは変更せず、画面内で部品の配置・回転・表示色を設定しています。利用者の指定に従い、表示用メッシュだけ側面の浅い文字の凹凸を平面化しています。原作者と出典はこの文書に記載しています。リンク機構はオレンジ、チェキの歯車は青、カムは紫です。
 
 車のアイコンでは追加した単気筒模型を最初から大きく表示します。単独モデル用の切替は設けていません。右上のピストンのアイコンで同じ模型を車体のエンジンルームに戻したり、取り出して拡大したりできます。この配置は車のエンジンの基礎を説明するための対応図であり、印刷キットがそのまま実車に搭載されることを示すものではありません。点線と光は模型の出力軸から車の駆動部への対応、車輪と路面の動きは前進を示します。分解時には動力の対応線を消します。
 

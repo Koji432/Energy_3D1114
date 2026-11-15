@@ -1,6 +1,6 @@
 import * as THREE from '../vendor/three.module.js';
-import { createMechanism } from './mechanisms.js?v=20261116-2';
-import { createCarBody } from './car-body.js?v=20261116-2';
+import { createMechanism } from './mechanisms.js?v=20261116-3';
+import { createCarBody } from './car-body.js?v=20261116-3';
 
 const tau = 2 * Math.PI;
 const vector = coordinates => new THREE.Vector3(...coordinates);

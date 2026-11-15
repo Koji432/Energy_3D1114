@@ -65,7 +65,11 @@ h1 { font-size: clamp(27px, 3.3vw, 45px); letter-spacing: -.055em; line-height: 
 .view canvas:active { cursor: grabbing; }
 .view-reset { position: absolute; right: 11px; bottom: 10px; background: #fffffff2; }
 .view-reset.button { width: 37px; min-height: 37px; }
-.view-error { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; padding: 20px; color: var(--muted); font-size: 14px; }
+.view-error { position: absolute; inset: 0; display: grid; place-items: center; align-content: center; gap: 16px; text-align: center; padding: 20px; color: var(--muted); font-size: 14px; }
+.view-loading { position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none; }
+.view-loading::before { content: ''; width: 25px; height: 25px; border: 3px solid #dce4ed; border-top-color: #6d8ab6; border-radius: 50%; animation: loading-turn .9s linear infinite; }
+@keyframes loading-turn { to { transform: rotate(1turn); } }
+@media (prefers-reduced-motion: reduce) { .view-loading::before { animation: none; } }
 .product-bar { padding: 13px clamp(12px, 2vw, 24px); display: flex; align-items: center; justify-content: space-between; gap: 12px; border-bottom: 1px solid var(--line); }
 .product-tabs, .view-modes { display: flex; align-items: center; gap: 5px; }
 .segment { padding: 4px; background: #edf2f7; border-radius: 11px; }

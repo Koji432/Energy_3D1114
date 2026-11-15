@@ -1,6 +1,6 @@
 import * as THREE from '../vendor/three.module.js';
-import { createPrintedEngine, dimensions } from './printed-engine.js?v=20261116-2';
-import { createCarBody } from './car-body.js?v=20261116-2';
+import { createPrintedEngine, dimensions } from './printed-engine.js?v=20261116-3';
+import { createCarBody } from './car-body.js?v=20261116-3';
 
 // The printed kit is the main teaching model. Its placement in the transparent
 // engine bay is a correspondence illustration, not a production engine design.
