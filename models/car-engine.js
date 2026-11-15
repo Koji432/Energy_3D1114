@@ -1,5 +1,5 @@
 import * as THREE from '../vendor/three.module.js';
-import { createEngine } from './engine.js?v=20261115-1';
+import { createEngine } from './engine.js?v=20261115-5';
 
 export function createCarEngine() {
   const root = new THREE.Group();
@@ -14,7 +14,7 @@ export function createCarEngine() {
   const light = new THREE.MeshStandardMaterial({ color: 0xeaf4ff, emissive: 0x779dbb, emissiveIntensity: .45 });
   const driveBlue = new THREE.MeshStandardMaterial({ color: 0x3873e6, metalness: .45, roughness: .3 });
   const driveAmber = new THREE.MeshStandardMaterial({ color: 0xef9a37, metalness: .45, roughness: .3 });
-  const frontWheels = [];
+  const wheels = [];
   function box(parent, w, h, d, x, y, z, material) {
     const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), material);
     mesh.position.set(x,y,z); parent.add(mesh); return mesh;
@@ -34,7 +34,7 @@ export function createCarEngine() {
     box(car,.12,.09,4.9,sign*1.61,.65,0,metal);
     for(const z of [-1.85,1.72]) {
       const wheel = new THREE.Group(); wheel.position.set(sign*1.50,.60,z); car.add(wheel);
-      if(z > 0) frontWheels.push(wheel);
+      wheels.push(wheel);
       const tire = new THREE.Mesh(new THREE.CylinderGeometry(.59,.59,.34,56),rubber);
       tire.rotation.z=Math.PI/2;wheel.add(tire);
       const hub = new THREE.Mesh(new THREE.CylinderGeometry(.39,.39,.36,48),metal);
@@ -75,11 +75,11 @@ export function createCarEngine() {
     box(car,.65,.12,.62,x,.98,-.45,rubber);
   }
 
-  // A cutaway final-drive stage shows the path to the front axle. Two external
-  // gears reverse direction and reduce speed 2:1; straight travel means both
-  // front half-shafts turn together. This is a simplified transaxle view.
-  function axleGear(radius, teeth, y) {
-    const wheel=new THREE.Group();wheel.position.set(.88,y,1.72);car.add(wheel);
+  // Two gear meshes in separate axial planes represent a selected forward
+  // ratio and the final drive. The intermediate gears share one shaft.
+  // Both front half-shafts turn together in this straight-ahead example.
+  function axleGear(radius, teeth, x, y, z) {
+    const wheel=new THREE.Group();wheel.position.set(x,y,z);car.add(wheel);
     const disc=new THREE.Mesh(new THREE.CylinderGeometry(radius-.018,radius-.018,.075,40),driveBlue);
     disc.rotation.z=Math.PI/2;wheel.add(disc);
     for(let i=0;i<teeth;i++) {
@@ -89,27 +89,51 @@ export function createCarEngine() {
     }
     return wheel;
   }
-  const inputGear=axleGear(.09,12,.7245);
-  const outputGear=axleGear(.18,24,.4545);
-  rod([.63,.7245,1.72],[1.01,.7245,1.72],.038,driveAmber);
-  rod([-1.15,.4545,1.72],[1.15,.4545,1.72],.045,driveAmber);
+  const inputGear=axleGear(.09,12,1.02,.7245,1.72);
+  const intermediateA=axleGear(.09,12,1.02,.7245,1.90);
+  const intermediateB=axleGear(.09,12,.88,.7245,1.90);
+  const outputGear=axleGear(.18,24,.88,.4545,1.90);
+  rod([.63,.7245,1.72],[1.08,.7245,1.72],.038,driveAmber);
+  rod([.80,.7245,1.90],[1.08,.7245,1.90],.035,driveAmber);
+  rod([-1.15,.4545,1.90],[1.15,.4545,1.90],.045,driveAmber);
   for(const sign of [-1,1]) {
-    rod([sign*1.15,.4545,1.72],[sign*1.50,.60,1.72],.045,driveAmber);
+    rod([sign*1.15,.4545,1.90],[sign*1.50,.60,1.72],.045,driveAmber);
     const joint=new THREE.Mesh(new THREE.SphereGeometry(.075,12,8),metal);
-    joint.position.set(sign*1.15,.4545,1.72);car.add(joint);
+    joint.position.set(sign*1.15,.4545,1.90);car.add(joint);
   }
-  const axleMarker=box(car,2.25,.025,.025,0,.5025,1.72,driveBlue);
+  const axleMarker=box(car,2.25,.025,.025,0,.5025,1.90,driveBlue);
+
+  // Passing road marks make the wheel rotation read as forward travel.
+  const road = new THREE.Group();
+  car.add(road);
+  const roadSurface = new THREE.MeshStandardMaterial({ color: 0xaebfce, roughness: .9 });
+  const marks = Array.from({length: 12}, (_, i) => {
+    const mark = box(road,.11,.012,.52,i%2 ? 2.08 : -2.08,.012,0,roadSurface);
+    return mark;
+  });
 
   const engine = createEngine();
   root.add(engine.root);
   const source = new THREE.Vector3(0,.51,1.72);
-  const destination = new THREE.Vector3(0,.15,3.25);
+  const destination = new THREE.Vector3(1.8,.15,3.25);
   const lineGeometry = new THREE.BufferGeometry().setFromPoints([source,new THREE.Vector3()]);
-  const line = new THREE.Line(lineGeometry, new THREE.LineDashedMaterial({color:0x3873e6,dashSize:.12,gapSize:.09,transparent:true,opacity:.65}));
+  const line = new THREE.Line(lineGeometry, new THREE.LineDashedMaterial({color:0x3873e6,dashSize:.12,gapSize:.09,transparent:true,opacity:.5,depthTest:false}));
   line.frustumCulled=false;root.add(line);
+  const flywheel = engine.root.getObjectByName('output-flywheel');
+  const output = new THREE.Vector3();
+  const input = new THREE.Vector3();
+  const powerMaterial = new THREE.MeshBasicMaterial({color:0xf2aa43,transparent:true,opacity:.9,depthTest:false});
+  const pulses = Array.from({length: 7}, () => {
+    const pulse = new THREE.Mesh(new THREE.SphereGeometry(.07,10,8),powerMaterial);
+    root.add(pulse);return pulse;
+  });
+  const axlePulses = [-1,1].map(sign => Array.from({length: 3}, () => {
+    const pulse = new THREE.Mesh(new THREE.SphereGeometry(.052,10,8),powerMaterial);
+    car.add(pulse);return {pulse,sign};
+  })).flat();
   return {
     root, camera: [-6.4,5.1,8.3], target: [0,1.05,.2],
-    detailCamera: [-9.1,7.9,14.8], detailTarget: [0,2.7,2.5],
+    detailCamera: [-10,8,16], detailTarget: [-.1,2.7,1.6],
     explodedCamera: [-12,10.9,19], explodedTarget: [0,3.1,2.5],
     update(turn,explode=0,focus=null,extraction=0) {
       const amount = THREE.MathUtils.smoothstep(extraction,0,1);
@@ -118,21 +142,42 @@ export function createCarEngine() {
       engine.root.position.copy(source).lerp(destination,amount);
       engine.root.position.y += Math.sin(Math.PI*amount)*1.3;
       car.position.set(-5.2*amount,0,-2.8*amount);
+      paint.transparent=amount>.01;
+      paint.opacity=1-amount*.5;
+      paint.depthWrite=amount<.01;
       engine.update(turn,explode*amount,focus);
       inputGear.rotation.x=turn*Math.PI*2;
-      outputGear.rotation.x=-turn*Math.PI+Math.PI/24;
-      frontWheels.forEach(wheel=>{wheel.rotation.x=-turn*Math.PI;});
+      intermediateA.rotation.x=-turn*Math.PI*2+Math.PI/12;
+      intermediateB.rotation.x=intermediateA.rotation.x;
+      outputGear.rotation.x=turn*Math.PI;
+      wheels.forEach(wheel=>{wheel.rotation.x=turn*Math.PI;});
+      marks.forEach((mark,i)=>{
+        mark.position.z=3.1-((Math.floor(i/2)*1.1+turn*Math.PI*.59)%6.6+6.6)%6.6;
+      });
       // The offset stripe travels around the axle, showing the same output
       // angle as the wheels rather than an unrelated free-spinning cylinder.
-      axleMarker.position.y=.4545+.048*Math.cos(-turn*Math.PI);
-      axleMarker.position.z=1.72+.048*Math.sin(-turn*Math.PI);
-      axleMarker.rotation.x=-turn*Math.PI;
-      line.visible=amount>.025;
-      const a=source.clone().add(car.position);
-      const b=engine.root.position.clone().add(new THREE.Vector3(0,1.1*scale,0));
+      axleMarker.position.y=.4545+.048*Math.cos(turn*Math.PI);
+      axleMarker.position.z=1.90+.048*Math.sin(turn*Math.PI);
+      axleMarker.rotation.x=turn*Math.PI;
+      // The dashed callout links the enlarged engine to its location in the
+      // car; moving highlights continue along the two driven half-shafts.
+      root.updateMatrixWorld(true);
+      flywheel.getWorldPosition(output);
+      input.set(1.02,.7245,1.72).add(car.position);
+      line.visible=amount>.025 && explode<.05;
       const positions=lineGeometry.attributes.position;
-      positions.setXYZ(0,a.x,a.y,a.z);positions.setXYZ(1,b.x,b.y,b.z);positions.needsUpdate=true;
+      positions.setXYZ(0,output.x,output.y,output.z);positions.setXYZ(1,input.x,input.y,input.z);positions.needsUpdate=true;
       line.computeLineDistances();
+      pulses.forEach((pulse,i)=>{
+        pulse.visible=line.visible;
+        const travel=((turn*.7+i/pulses.length)%1+1)%1;
+        pulse.position.copy(output).lerp(input,travel);
+      });
+      axlePulses.forEach(({pulse,sign},i)=>{
+        pulse.visible=explode<.05;
+        const travel=((turn*.7+(i%3)/3)%1+1)%1;
+        pulse.position.set(sign*1.50*travel,.4545+.1455*travel,1.90-.18*travel);
+      });
     },
   };
 }

@@ -177,34 +177,7 @@ main { padding-top: 20px; }
 }
 .view-orbit { position: absolute; right: 11px; bottom: 59px; background: #fff; }
 .view-orbit[aria-pressed="false"] { color: #2059c1; background: #e8efff; }
-.bicycle-control { justify-content: center; gap: 26px; }
-.gear-equation, .gear-metric { display: inline-flex; align-items: center; gap: 9px; color: #29405d; font-weight: 700; font-size: 13px; }
-.gear-metric output { min-width: 49px; font-variant-numeric: tabular-nums; }
-.gear-metric meter { width: clamp(45px, 9vw, 120px); height: 17px; }
-.gear-metric svg { width: 27px; height: 27px; }
-.bicycle .handwheel { width: 62px; height: 62px; }
-#full-view .bicycle-control { padding-inline: 20px; }
-@media (max-width: 550px) {
- .bicycle-control { gap: 10px; flex-wrap: wrap; }
- .gear-metric { gap: 5px; font-size: 12px; }
- .bicycle .handwheel { width: 46px; height: 46px; }
- .gear-metric meter { width: 35px; }
- .tabs { gap: 8px; }
-}
 
 .mechanism-cards { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-.bicycle .product-view { height: clamp(460px, 66vh, 760px); }
-.bicycle-control.sr-only { border: 0; }
-@media (max-width: 1100px) {
-  .mechanism-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-}
-@media (max-width: 550px) {
-  .mechanism-cards { grid-template-columns: 1fr; }
-  .bicycle .product-view { height: 570px; }
-}
-.bicycle .product-bar { justify-content: center; }
-.bicycle [data-gear] { width: 70px; height: 52px; }
-.bicycle .sprocket-choice { width: 44px; height: 44px; color: #5375b6; stroke-width: 1.2; }
-.sprocket-choice polygon { fill: currentColor; stroke: currentColor; }
-.sprocket-choice circle { fill: white; stroke: white; }
-.bicycle [aria-pressed="true"] .sprocket-choice { color: #2059c1; }
+@media (max-width: 1100px) { .mechanism-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 550px) { .mechanism-cards { grid-template-columns: 1fr; } .tabs { gap: 8px; } }

@@ -1,29 +1,28 @@
 import * as THREE from 'three';
 import { OrbitControls } from './vendor/OrbitControls.js';
-import { createMotion } from './models/motion.js?v=20261115-1';
-import { createMechanism } from './models/mechanisms.js?v=20261115-1';
-import { createBicycle, bicycleGears } from './models/bicycle.js?v=20261115-1';
+import { createMotion } from './models/motion.js?v=20261115-5';
+import { createMechanism } from './models/mechanisms.js?v=20261115-5';
 
 const pages = [
   { id: 'motion', title: '運動の種類' },
   { id: 'mechanisms', title: '機構の動き' },
   { id: 'products', title: '製品のしくみ' },
-  { id: 'bicycle', title: '自転車のギア比' },
 ];
 const motionCards = [
   { id: 'carousel', title: '直線運動', subtitle: 'メリーゴーランドの馬の上下運動', icon: 'straight', accent: '#22795e', chip: '#e0f5ed', tint: '#e6f1ec' },
   { id: 'teacup', title: '回転運動', subtitle: 'ティーカップ', icon: 'rotate', accent: '#245fc6', chip: '#e6efff', tint: '#e8effa' },
-  { id: 'crank-rocker', title: '揺動運動・てこクランク', icon: 'sway', accent: '#a54d21', chip: '#fcece2', tint: '#f4ede7' },
+  { id: 'wiper', title: '揺動運動・車のワイパー', icon: 'sway', accent: '#a54d21', chip: '#fcece2', tint: '#f4ede7' },
 ];
 const mechanismCards = [
   { id: 'gears', title: '歯車', icon: 'gears', accent: '#3873e6', chip: '#e6efff', tint: '#e8effa' },
   { id: 'linkage', title: 'リンク機構', icon: 'logo', accent: '#ef9a37', chip: '#fff0dd', tint: '#f5efe7' },
-  { id: 'cam', title: 'カム機構', icon: 'cam', accent: '#9c63e9', chip: '#f0e8ff', tint: '#eeeafa' },
   { id: 'crank-rocker', title: 'てこクランク', icon: 'sway', accent: '#c97a2d', chip: '#fff0dd', tint: '#f5efe7' },
+  { id: 'cam', title: 'カム機構', icon: 'cam', accent: '#9c63e9', chip: '#f0e8ff', tint: '#eeeafa' },
 ];
 const products = [
-  { id: 'car', title: 'エンジン', button: '車', icon: 'car', rate: .24, load: () => import('./models/car-engine.js?v=20261115-1').then(module => module.createCarEngine()) },
-  { id: 'camera', title: 'チェキのフィルム送り', button: 'チェキ', icon: 'camera', rate: .16, load: () => import('./models/camera.js?v=20261115-1').then(module => module.createCameraProduct()) },
+  { id: 'engine', title: '単気筒エンジン', icon: 'engine', rate: .18, load: () => import('./models/printed-engine.js?v=20261115-5').then(module => module.createPrintedEngine()) },
+  { id: 'car', title: '車でのピストンの使われ方', icon: 'car', rate: .18, load: () => import('./models/car-engine.js?v=20261115-5').then(module => module.createCarEngine()) },
+  { id: 'camera', title: 'チェキのフィルム送り', button: 'チェキ', icon: 'camera', rate: .16, load: () => import('./models/camera.js?v=20261115-5').then(module => module.createCameraProduct()) },
 ];
 
 const workspace = document.querySelector('#workspace');
@@ -35,7 +34,7 @@ const next = document.querySelector('#next');
 const pageCount = document.querySelector('#page-count');
 const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)');
 const icon = name => `<svg aria-hidden="true"><use href="#i-${name}"/></svg>`;
-const playhead = { motion: 0, mechanisms: 0, products: 0, bicycle: 0 };
+const playhead = { motion: 0, mechanisms: 0, products: 0 };
 let page = '';
 let product = products[0];
 let running = !reduceMotion.matches;
@@ -162,13 +161,13 @@ function createView(element, model, title, rate, isProduct = false) {
   let directManipulation = !!manual;
   controls.enabled = !directManipulation;
   if (manual) canvas.style.touchAction = 'none';
-  let inspecting = false;
   function viewPose() {
     const open = isProduct && exploded;
     const detail = isProduct && extracted;
     const target = new THREE.Vector3(...(open && model.explodedTarget || detail && model.detailTarget || model.target));
     const position = new THREE.Vector3(...(open && model.explodedCamera || detail && model.detailCamera || model.camera));
-    const fit = isProduct ? Math.max(1, 1.48 / camera.aspect) : Math.max(1, (model.fitAspect || .94) / camera.aspect);
+    const fitAspect = isProduct ? ((open ? model.explodedFitAspect : model.fitAspect) || 1.48) : (model.fitAspect || .94);
+    const fit = Math.max(1, fitAspect / camera.aspect);
     position.sub(target).multiplyScalar(fit).add(target);
     const distance = position.distanceTo(target);
     controls.minDistance = distance * .48;
@@ -223,11 +222,6 @@ function createView(element, model, title, rate, isProduct = false) {
   }
   canvas.addEventListener('pointerdown', event => {
     if (!event.isPrimary || event.button !== 0 || pointerStart) return;
-    if (model.inspection?.weight > .001) {
-      model.cancelInspection?.();
-      resetView();
-      inspecting = false;
-    }
     pointerStart = { x: event.clientX, y: event.clientY, id: event.pointerId };
     pointerMoved = false;
     if (directManipulation) {
@@ -242,8 +236,7 @@ function createView(element, model, title, rate, isProduct = false) {
     if (!directManipulation || !pointerMoved) return;
     const angle = modelAngle(event);
     const difference = Math.atan2(Math.sin(angle - lastModelAngle), Math.cos(angle - lastModelAngle));
-    const direction = page === 'bicycle' ? -1 : 1;
-    turnByHand(manualTurn + direction * difference / (Math.PI * 2 * (model.dragResistance || 1)));
+    turnByHand(manualTurn + difference / (Math.PI * 2 * (model.dragResistance || 1)));
     lastModelAngle = angle;
   });
   canvas.addEventListener('pointerup', event => {
@@ -361,24 +354,11 @@ function createView(element, model, title, rate, isProduct = false) {
         if (camera.position.distanceToSquared(cameraGoal.position) < 1e-5 &&
             controls.target.distanceToSquared(cameraGoal.target) < 1e-5) cameraGoal = null;
       }
-      if (manual && (running || (model.shifting && !pointerStart))) {
+      if (manual && running) {
         manualTurn += delta * Number(speed.value) * rate;
         syncManual();
       }
-      model.update(manual ? manualTurn : time * rate, spread, isProduct ? focusPart : null, extraction, delta);
-      const inspection = model.inspection;
-      if (inspection?.weight > .001 && directManipulation && !reduceMotion.matches) {
-        const base = viewPose();
-        const nearTarget = new THREE.Vector3(...inspection.target);
-        const nearPosition = new THREE.Vector3(...inspection.camera);
-        nearPosition.sub(nearTarget).multiplyScalar(Math.max(1, 1.05 / camera.aspect)).add(nearTarget);
-        camera.position.copy(base.position).lerp(nearPosition, inspection.weight);
-        controls.target.copy(base.target).lerp(nearTarget, inspection.weight);
-        inspecting = true;
-      } else if (inspecting) {
-        resetView();
-        inspecting = false;
-      }
+      model.update(manual ? manualTurn : time * rate, spread, isProduct ? focusPart : null, extraction);
       controls.update();
       renderer.render(scene, camera);
     },
@@ -424,6 +404,7 @@ function renderCards() {
 
 function syncProducts() {
   const scope = expandedArticle || workspace;
+  scope.querySelector('[data-source]')?.toggleAttribute('hidden', product.id !== 'engine');
   scope.querySelector('[data-extract]')?.toggleAttribute('hidden', product.id !== 'car');
   scope.querySelector('[data-extract]')?.setAttribute('aria-pressed', String(extracted));
   scope.querySelectorAll('[data-product]').forEach(button => {
@@ -434,6 +415,7 @@ function syncProducts() {
   });
   scope.querySelectorAll('[data-part]').forEach(button => {
     button.setAttribute('aria-pressed', button.dataset.part === focusPart);
+    button.hidden = product.id === 'engine' && button.dataset.part !== 'linkage';
   });
 }
 
@@ -467,7 +449,8 @@ function renderProducts() {
           ${products.map(item => `<button type="button" class="button" data-product="${item.id}" aria-label="${item.title}" title="${item.title}">${icon(item.icon)}</button>`).join('')}
         </div>
         <div class="view-modes segment" role="group" aria-label="表示">
-          <button type="button" class="button" data-extract aria-label="エンジンを取り出す・戻す" title="エンジンを取り出す・戻す">${icon('engine')}</button>
+          <a class="button" data-source href="./assets/printed-engine/README.txt" target="_blank" rel="noopener" aria-label="モデルの出典と作者" title="WhopperPrinting · CC BY-NC-ND 4.0">${icon('info')}</a>
+          <button type="button" class="button" data-extract aria-label="エンジンを取り出す・車全体に戻す" title="エンジンを取り出す・車全体に戻す">${icon('engine')}</button>
           <button type="button" class="button" data-explode="false" aria-label="組み立て" title="組み立て">${icon('product')}</button>
           <button type="button" class="button" data-explode="true" aria-label="分解" title="分解">${icon('explode')}</button>
         </div>
@@ -515,36 +498,6 @@ function renderProducts() {
   showProduct();
 }
 
-function renderBicycle() {
-  workspace.className = '';
-  const sprocket = teeth => {
-    const radius = teeth * .48;
-    const points = Array.from({ length: 48 }, (_, i) => {
-      const a = i * Math.PI / 24;
-      const r = radius + (i % 4 < 2 ? 2 : 0);
-      return `${24 + Math.cos(a) * r},${24 + Math.sin(a) * r}`;
-    }).join(' ');
-    return `<svg viewBox="0 0 48 48" class="sprocket-choice" aria-hidden="true"><polygon points="${points}"/><circle cx="24" cy="24" r="3"/></svg>`;
-  };
-  workspace.innerHTML = `<article class="product bicycle" style="--accent:#3873e6;--chip:#e6efff">
-    <div class="product-bar">
-      <div class="segment" role="group" aria-label="後ろのギアを選択">
-        ${bicycleGears.map((teeth,i) => `<button class="button" data-gear="${i}" aria-label="${['大きいギア・軽い','中くらいのギア','小さいギア・重い'][i]}" aria-pressed="${i===0}">${sprocket(teeth)}</button>`).join('')}
-      </div>
-    </div>
-    <div class="view product-view">${viewResetButton()}</div>
-    <div class="manual-control bicycle-control sr-only"><input type="range" min="0" max="720" step="1" value="0" aria-label="ペダルの回転角度"></div>
-  </article>`;
-  const model = createBicycle();
-  createView(workspace.querySelector('.view'), model, '自転車', .28);
-  workspace.querySelectorAll('[data-gear]').forEach(button => button.addEventListener('click', () => {
-    const scope = expandedArticle || workspace;
-    model.setGear(Number(button.dataset.gear), !reduceMotion.matches);
-    scope.querySelectorAll('[data-gear]').forEach(other => other.setAttribute('aria-pressed',String(other===button)));
-    scope.querySelector('canvas').setAttribute('aria-description', `前42歯、後ろ${bicycleGears[Number(button.dataset.gear)]}歯。ペダル1回転で車輪${model.targetRatio.toFixed(2)}回転。`);
-  }));
-}
-
 function setPageLink(link, destination) {
   if (destination) {
     link.href = `#${destination.id}`;
@@ -562,7 +515,7 @@ function route() {
   ++selectionVersion;
   clearViews();
   page = nextPage.id;
-  running = !['mechanisms', 'bicycle'].includes(page) && !reduceMotion.matches;
+  running = page !== 'mechanisms' && !reduceMotion.matches;
   playbackLabel();
   heading.textContent = nextPage.title;
   document.title = `${nextPage.title} | 動きのしくみ`;
@@ -574,7 +527,6 @@ function route() {
   setPageLink(next, pages[index + 1]);
   pageCount.textContent = `${index + 1} / ${pages.length}`;
   if (page === 'products') renderProducts();
-  else if (page === 'bicycle') renderBicycle();
   else renderCards();
   window.scrollTo(0, 0);
 }

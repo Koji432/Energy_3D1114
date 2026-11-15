@@ -1,0 +1,65 @@
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import * as THREE from '../vendor/three.module.js';
+import { createPrintedEngine } from '../models/printed-engine.js';
+import { createCarEngine } from '../models/car-engine.js';
+
+const originalFetch = globalThis.fetch;
+globalThis.fetch = async url => new Response(await readFile(url));
+let model;
+try { model = await createPrintedEngine(); }
+finally { globalThis.fetch = originalFetch; }
+
+const parts = model.root.children.filter(part => part.isGroup);
+assert.equal(parts.length, 28, 'The kit has 28 assembled pieces from 14 original STL files');
+for (const [name, count] of [['washer-4x',4],['bolt-9x',9],['rod-bolt-2x',2],['nut-3x',3]]) {
+  assert.equal(parts.filter(part => part.name === name).length, count, name);
+}
+
+// Compare actual rendered mesh coordinates at the measured source joint holes.
+// This catches incorrect anchors, rotation signs, scale and parent transforms.
+const mesh = name => model.root.getObjectByName(name).children[0].children[0];
+const point = (name, xyz) => mesh(name).localToWorld(new THREE.Vector3(...xyz));
+const near = (a,b,label) => assert.ok(a.distanceTo(b) < 2e-5, `${label}: ${a.distanceTo(b)}`);
+let lowest = Infinity, highest = -Infinity;
+for (let step=0; step<=720; step++) {
+  model.update(step/720, 0);
+  model.root.updateMatrixWorld(true);
+  const wrist = point('head-1x',[156.763943153,128.444202749,29.999979861]);
+  const small = point('connectingrod-1x',[149.693840084,121.374352778,-83.25]);
+  const big = point('connectingrod-1x',[92.5,64.18051317,-83.25]);
+  const pin = point('rod-1x',[92.5,30.180513,10.451344]);
+  near(wrist,small,'Wrist pin must remain attached to the small end');
+  near(big,pin,'Crank pin must remain attached to the big end');
+  assert.ok(Math.abs(wrist.x)<1e-6,'Piston must remain on the bore axis');
+  assert.ok(Math.abs(big.distanceTo(small)/.035-80.884304)<.0001,'Rod must retain its printed length');
+  lowest=Math.min(lowest,wrist.y/.035);highest=Math.max(highest,wrist.y/.035);
+}
+assert.ok(Math.abs(highest-lowest-34)<1e-7,'Stroke must match the 17 mm crank throw');
+mesh('engineblock-1x').geometry.computeBoundingBox();
+const blockTop=mesh('engineblock-1x').geometry.boundingBox.max.z;
+assert.ok(Math.abs(highest+29.999979861-blockTop)<.003,'Piston crown must meet the block top at TDC');
+
+for (const spread of [0,.5,1]) {
+  model.update(.25,spread,'linkage');
+  model.root.updateMatrixWorld(true);
+  model.root.traverse(object=>assert.ok(object.matrixWorld.elements.every(Number.isFinite)));
+}
+
+const car = createCarEngine();
+for (let step=0;step<=144;step++) {
+  const turn=step/72;
+  car.update(turn,0,null,1);
+  const crank=car.root.getObjectByName('crankshaft');
+  const cam=car.root.getObjectByName('intake-camshaft');
+  const flywheel=car.root.getObjectByName('output-flywheel');
+  assert.ok(Math.abs(cam.rotation.x*2-crank.rotation.x)<1e-10,'Cam must turn once per two crank turns');
+  assert.equal(flywheel.rotation.x,crank.rotation.x,'Output must be attached to the crankshaft');
+  const driven=car.root.getObjectsByProperty('name','driven-wheel-marker');
+  assert.equal(driven.length,2);
+  driven.forEach(marker=>assert.ok(Math.abs(marker.parent.rotation.x*2-crank.rotation.x)<1e-10,
+    'Forward drive must rotate the wheels in the rolling direction at the illustrated reduction'));
+  assert.equal(driven[0].parent.rotation.x,driven[1].parent.rotation.x,'Straight-ahead wheels must agree');
+  car.root.traverse(object=>assert.ok(object.matrixWorld.elements.every(Number.isFinite)));
+}
+console.log('PASS: 28 parts, 721 assembled joint poses, original stroke/TDC, exploded transforms, car drive and cam ratios');

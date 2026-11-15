@@ -174,7 +174,9 @@ export function createEngine() {
       [x, throwRadius * Math.cos(phase), throwRadius * Math.sin(phase)], 'x');
     const piston = group(lower, [x, 0, 0]);
     piston.name = `piston-${i + 1}`;
-    cylinder(piston, .49, .61, silver, [0, .11, 0]);
+    // Match the print model's orange piston on the first cylinder so the
+    // same piston–connecting rod–crank relationship can be recognized.
+    cylinder(piston, .49, .61, i === 0 ? amber : silver, [0, .11, 0]);
     cylinder(piston, .45, .016, graphite, [0, .422, 0]);
     for (const y of [.25, .32, .39]) ring(piston, .486, .016, steel, [0, y, 0]);
     cylinder(piston, .12, 1.03, steel, [0, -.04, 0], 'x');
@@ -193,6 +195,9 @@ export function createEngine() {
       new THREE.MeshBasicMaterial({ color: 0xfff1a9, transparent: true, opacity: 0, depthWrite: false }), [x, 4.09, 0]);
     const loadGlow = add(lower, new THREE.SphereGeometry(.10, 12, 8),
       new THREE.MeshBasicMaterial({ color: 0xffdf86, transparent: true, opacity: .85, depthWrite: false }));
+    const forceArrow = new THREE.ArrowHelper(new THREE.Vector3(0,-1,0), new THREE.Vector3(x,4.08,.12), .5, 0xffa32e, .13, .10);
+    forceArrow.name = `power-stroke-${i + 1}`;
+    lower.add(forceArrow);
     const flows = [-1, 1].map(sign => {
       const curve = new THREE.CatmullRomCurve3([
         new THREE.Vector3(x + .15, 3.77, sign * 1.37),
@@ -203,7 +208,7 @@ export function createEngine() {
       const material = new THREE.MeshBasicMaterial({ color: sign < 0 ? intakeColor : exhaustColor, transparent: true, opacity: .9, depthWrite: false });
       return { curve, particles: Array.from({ length: 4 }, () => add(head, new THREE.SphereGeometry(.055, 8, 6), material)) };
     });
-    cylinders.push({ piston, connection, bigEnd, x, phase, combustion, bore, spark, loadGlow, flows });
+    cylinders.push({ piston, connection, bigEnd, x, phase, combustion, bore, spark, loadGlow, forceArrow, flows });
 
     for (const [side, z] of [-.62, .62].entries()) {
       const lobe = group(camshafts[side], [x, 0, 0]);
@@ -333,6 +338,9 @@ export function createEngine() {
         part.loadGlow.visible = stroke === 2 && explode < .1;
         part.loadGlow.position.copy(end).lerp(start, progress);
         part.loadGlow.scale.setScalar(.7 + power * .65);
+        part.forceArrow.visible = stroke === 2 && explode < .05 && chamberHeight > .15;
+        const arrowLength = chamberHeight * .78;
+        part.forceArrow.setLength(arrowLength, Math.min(.16, arrowLength * .3), Math.min(.12, arrowLength * .25));
       });
       valves.forEach(({ valve, spring, lobe, rocker, sign, cylinder: cylinderIndex, side }) => {
         const a = angle / 2 + lobe.rotation.x;

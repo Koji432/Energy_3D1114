@@ -1,5 +1,5 @@
 import * as THREE from '../vendor/three.module.js';
-import { createMechanism } from './mechanisms.js?v=20261115-1';
+import { createMechanism } from './mechanisms.js?v=20261115-5';
 
 const tau = 2 * Math.PI;
 const vector = coordinates => new THREE.Vector3(...coordinates);
