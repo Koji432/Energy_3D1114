@@ -1,5 +1,6 @@
 import * as THREE from '../vendor/three.module.js';
-import { createMechanism } from './mechanisms.js?v=20261115-5';
+import { createMechanism } from './mechanisms.js?v=20261116-2';
+import { createCarBody } from './car-body.js?v=20261116-2';
 
 const tau = 2 * Math.PI;
 const vector = coordinates => new THREE.Vector3(...coordinates);
@@ -250,101 +251,12 @@ function beveledPanel(parent, contour, depth, bevel, surface, at) {
   return mount(parent, geometry, surface, at);
 }
 
-function bodyLoft(parent, sections, surface) {
-  const crossSection = [[0, 0], [0.83, 0], [0.97, 0.17], [1, 0.65], [0.94, 0.91], [0.79, 1], [0, 1], [-0.79, 1], [-0.94, 0.91], [-1, 0.65], [-0.97, 0.17], [-0.83, 0]];
-  const vertices = sections.flatMap(([z, width, bottom, top]) =>
-    crossSection.flatMap(([x, y]) => [x * width, bottom + (top - bottom) * y, z]));
-  const indices = [];
-  const sides = crossSection.length;
-  for (let section = 0; section < sections.length - 1; section++) {
-    for (let side = 0; side < sides; side++) {
-      const a = section * sides + side;
-      const b = section * sides + (side + 1) % sides;
-      indices.push(a, b, a + sides, b, b + sides, a + sides);
-    }
-  }
-  const last = (sections.length - 1) * sides;
-  for (let side = 1; side < sides - 1; side++) {
-    indices.push(0, side + 1, side, last, last + side, last + side + 1);
-  }
-  const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
-  geometry.setIndex(indices);
-  geometry.computeVertexNormals();
-  return mount(parent, geometry, surface);
-}
-
 function carWiper() {
-  const root = new THREE.Group();
-  const paint = material(0xb6c5c7, 0.33, 0.30);
-  const tint = material(0x2e566a, 0.27, 0.28);
-  const glass = material(0x41687b, 0.31, 0.21);
+  const { root, windscreen } = createCarBody();
   const rubber = material(0x1e2930, 0.68);
   const orange = material(0xf0aa58, 0.36, 0.16);
   const movement = guide(0xfcc47d);
-  bodyLoft(root, [
-    [-1.73, 0.94, 0.29, 0.68],
-    [-1.58, 1.21, 0.22, 0.84],
-    [-1.12, 1.35, 0.23, 0.93],
-    [0.58, 1.40, 0.23, 0.98],
-    [1.20, 1.37, 0.24, 0.89],
-    [1.67, 1.26, 0.26, 0.77],
-    [1.79, 1.02, 0.32, 0.67],
-  ], paint);
-
-  for (const side of [-1, 1]) {
-    for (const z of [-1.13, 1.10]) {
-      const wheel = group(root, [side * 1.29, 0.36, z]);
-      wheel.rotation.z = -side * Math.PI / 2;
-      cylinder(wheel, 0.352, 0.352, 0.27, rubber, [0, 0, 0], 48);
-      hoop(wheel, 0.300, 0.023, rubber, [0, 0.134, 0]);
-      cylinder(wheel, 0.239, 0.239, 0.053, steel, [0, 0.134, 0], 40);
-      hoop(wheel, 0.19, 0.013, dark, [0, 0.165, 0]);
-      cylinder(wheel, 0.065, 0.065, 0.045, dark, [0, 0.16, 0], 20);
-      for (let bolt = 0; bolt < 5; bolt++) {
-        const angle = bolt * tau / 5;
-        cylinder(wheel, 0.016, 0.016, 0.027, dark, [Math.cos(angle) * 0.096, 0.164, Math.sin(angle) * 0.096], 10);
-      }
-    }
-  }
-
-  const cabin = [
-    [-1.66, 1.04, 0.73, 0.82],
-    [-1.30, 1.22, 0.80, 1.38],
-    [-0.97, 1.21, 0.84, 1.84],
-    [-0.66, 1.20, 0.86, 2.02],
-    [-0.17, 1.17, 0.87, 2.04],
-    [0.58, 1.23, 0.86, 0.98],
-  ];
-  bodyLoft(root, cabin, tint);
-  bodyLoft(root, [
-    [-1.09, 0.94, 1.78, 1.82],
-    [-0.84, 1.14, 1.89, 1.98],
-    [-0.51, 1.17, 1.97, 2.06],
-    [-0.18, 1.15, 1.98, 2.06],
-    [-0.028, 1.05, 1.94, 2.01],
-  ], paint);
-
-  for (const side of [-1, 1]) {
-    strut(root, [side * 1.12, 1.73, -0.97], [side * 1.27, 0.96, -1.38], 0.046, paint);
-    strut(root, [side * 1.11, 1.99, -0.51], [side * 1.24, 0.99, -0.51], 0.050, paint);
-    strut(root, [side * 1.19, 0.902, -1.40], [side * 1.31, 0.902, 0.56], 0.029, steel);
-    strut(root, [side * 1.29, 0.93, 0.40], [side * 1.48, 1.03, 0.37], 0.036, dark);
-    ellipsoid(root, [0.18, 0.079, 0.103], paint, [side * 1.47, 1.03, 0.36]);
-    beveledPanel(root, [[-0.22, -0.04], [0.24, -0.039], [0.21, 0.059], [-0.22, 0.081]], 0.027, 0.024, ivory, [side * 0.89, 0.67, 1.743]);
-  }
-  beveledPanel(root, [[-0.98, 0], [-0.94, -0.12], [0.94, -0.12], [0.98, 0]], 0.045, 0.035, dark, [0, 0.465, 1.75]);
-  for (let blade = 0; blade < 3; blade++) {
-    box(root, [1.64, 0.015, 0.026], steel, [0, 0.356 + 0.035 * blade, 1.803]);
-  }
-
-  const windscreen = group(root, [0, 0.981, 0.625]);
-  windscreen.rotation.x = -0.545;
-  const frame = [[-1.31, 0], [1.31, 0], [1.19, 0.46], [1.00, 1.17], [-1.00, 1.17], [-1.19, 0.46]];
-  const window = [[-1.238, 0.055], [1.238, 0.055], [1.133, 0.44], [0.952, 1.12], [-0.952, 1.12], [-1.133, 0.44]];
-  beveledPanel(windscreen, frame, 0.018, 0.03, dark, [0, 0, 0]);
-  beveledPanel(windscreen, window, 0.01, 0.013, glass, [0, 0, 0.046]);
-  const pivots = [-0.37, 0.80];
+  const pivots = [-0.22, 0.82];
   // A continuously turning crank drives an oscillating rocker. Both wipers
   // turn about fixed pivots in the plane of the windscreen.
   const angleAt = turn => {
@@ -367,6 +279,7 @@ function carWiper() {
     const hinge = mount(windscreen, new THREE.CylinderGeometry(0.065, 0.075, 0.039, 25), dark, mountAt);
     hinge.rotation.x = Math.PI / 2;
     const arm = group(windscreen, [x, 0.083, 0.11]);
+    arm.scale.setScalar(.91);
     beveledPanel(arm, [[0.025, -0.025], [0.48, -0.027], [0.62, -0.01], [0.62, 0.025], [0.025, 0.025]], 0.026, 0.01, orange, [0, 0, 0]);
     const blade = group(arm, [0.686, 0.033, -0.012]);
     blade.rotation.z = -.035;
@@ -374,7 +287,7 @@ function carWiper() {
     box(blade, [0.14, 0.052, 0.035], orange, [-0.036, 0, 0.044]);
 
     angularArrow(windscreen, low + 0.05, high - 0.06,
-      angle => [x + .91 * Math.cos(angle), 0.082 + .91 * Math.sin(angle), 0.080],
+      angle => [x + .84 * Math.cos(angle), 0.082 + .84 * Math.sin(angle), 0.080],
       movement, 0.038);
     return arm;
   });
@@ -385,7 +298,7 @@ function carWiper() {
   }
 
   update(0);
-  return { root, update, camera: [3.35, 3.88, 6.81], target: [0, 0.96, 0.13] };
+  return { root, update, camera: [4.3, 3.6, 7.8], target: [0, 0.96, 0.22] };
 }
 
 const models = { carousel, teacup: teacupRide, wiper: carWiper, 'crank-rocker': () => createMechanism('crank-rocker') };

@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from './vendor/OrbitControls.js';
-import { createMotion } from './models/motion.js?v=20261115-5';
-import { createMechanism } from './models/mechanisms.js?v=20261115-5';
+import { createMotion } from './models/motion.js?v=20261116-2';
+import { createMechanism } from './models/mechanisms.js?v=20261116-2';
 
 const pages = [
   { id: 'motion', title: '運動の種類' },
@@ -20,9 +20,8 @@ const mechanismCards = [
   { id: 'cam', title: 'カム機構', icon: 'cam', accent: '#9c63e9', chip: '#f0e8ff', tint: '#eeeafa' },
 ];
 const products = [
-  { id: 'engine', title: '単気筒エンジン', icon: 'engine', rate: .18, load: () => import('./models/printed-engine.js?v=20261115-5').then(module => module.createPrintedEngine()) },
-  { id: 'car', title: '車でのピストンの使われ方', icon: 'car', rate: .18, load: () => import('./models/car-engine.js?v=20261115-5').then(module => module.createCarEngine()) },
-  { id: 'camera', title: 'チェキのフィルム送り', button: 'チェキ', icon: 'camera', rate: .16, load: () => import('./models/camera.js?v=20261115-5').then(module => module.createCameraProduct()) },
+  { id: 'car', title: '車のエンジンの基礎', icon: 'car', rate: .18, load: () => import('./models/car-engine.js?v=20261116-2').then(module => module.createCarEngine()) },
+  { id: 'camera', title: 'チェキのフィルム送り', button: 'チェキ', icon: 'camera', rate: .16, load: () => import('./models/camera.js?v=20261116-2').then(module => module.createCameraProduct()) },
 ];
 
 const workspace = document.querySelector('#workspace');
@@ -39,7 +38,7 @@ let page = '';
 let product = products[0];
 let running = !reduceMotion.matches;
 let exploded = false;
-let extracted = false;
+let extracted = true;
 let focusPart = null;
 let views = [];
 let selectionVersion = 0;
@@ -404,7 +403,7 @@ function renderCards() {
 
 function syncProducts() {
   const scope = expandedArticle || workspace;
-  scope.querySelector('[data-source]')?.toggleAttribute('hidden', product.id !== 'engine');
+  scope.querySelector('[data-source]')?.toggleAttribute('hidden', product.id !== 'car');
   scope.querySelector('[data-extract]')?.toggleAttribute('hidden', product.id !== 'car');
   scope.querySelector('[data-extract]')?.setAttribute('aria-pressed', String(extracted));
   scope.querySelectorAll('[data-product]').forEach(button => {
@@ -415,7 +414,7 @@ function syncProducts() {
   });
   scope.querySelectorAll('[data-part]').forEach(button => {
     button.setAttribute('aria-pressed', button.dataset.part === focusPart);
-    button.hidden = product.id === 'engine' && button.dataset.part !== 'linkage';
+    button.hidden = product.id === 'car' && button.dataset.part === 'cam';
   });
 }
 
@@ -468,7 +467,7 @@ function renderProducts() {
       playhead.products = 0;
       focusPart = null;
       exploded = false;
-      extracted = false;
+      extracted = product.id === 'car';
       showProduct();
       return;
     }

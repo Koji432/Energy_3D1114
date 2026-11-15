@@ -46,20 +46,23 @@ for (const spread of [0,.5,1]) {
   model.root.traverse(object=>assert.ok(object.matrixWorld.elements.every(Number.isFinite)));
 }
 
-const car = createCarEngine();
+globalThis.fetch = async url => new Response(await readFile(url));
+let car;
+try { car = await createCarEngine(); }
+finally { globalThis.fetch = originalFetch; }
 for (let step=0;step<=144;step++) {
   const turn=step/72;
   car.update(turn,0,null,1);
-  const crank=car.root.getObjectByName('crankshaft');
-  const cam=car.root.getObjectByName('intake-camshaft');
-  const flywheel=car.root.getObjectByName('output-flywheel');
-  assert.ok(Math.abs(cam.rotation.x*2-crank.rotation.x)<1e-10,'Cam must turn once per two crank turns');
-  assert.equal(flywheel.rotation.x,crank.rotation.x,'Output must be attached to the crankshaft');
+  const crank=car.root.getObjectByName('weight2-1x');
+  const input=car.root.getObjectByName('drive-input');
+  const output=car.root.getObjectByName('drive-output');
+  assert.equal(input.rotation.x,crank.rotation.z,'Car input must follow the actual printed crank');
+  assert.equal(output.rotation.x*2,crank.rotation.z,'The depicted forward reduction must be consistent');
   const driven=car.root.getObjectsByProperty('name','driven-wheel-marker');
   assert.equal(driven.length,2);
-  driven.forEach(marker=>assert.ok(Math.abs(marker.parent.rotation.x*2-crank.rotation.x)<1e-10,
+  driven.forEach(marker=>assert.ok(Math.abs(marker.parent.rotation.x*2-crank.rotation.z)<1e-10,
     'Forward drive must rotate the wheels in the rolling direction at the illustrated reduction'));
   assert.equal(driven[0].parent.rotation.x,driven[1].parent.rotation.x,'Straight-ahead wheels must agree');
   car.root.traverse(object=>assert.ok(object.matrixWorld.elements.every(Number.isFinite)));
 }
-console.log('PASS: 28 parts, 721 assembled joint poses, original stroke/TDC, exploded transforms, car drive and cam ratios');
+console.log('PASS: 28 parts, 721 assembled joint poses, original stroke/TDC, exploded transforms, printed crank driving the car wheels');

@@ -40,6 +40,17 @@ async function readMesh(name) {
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
   geometry.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
+  if (name === 'engineblock-1x') {
+    // Flatten only the shallow lettering recesses in the display mesh.
+    // The downloaded STL remains unchanged; attribution is retained separately.
+    for (let i = 0; i < positions.length; i += 3) {
+      const x = positions[i], y = positions[i + 1], z = positions[i + 2];
+      if (y < 29.70 || y > 78.36 || z < 41.80 || z > 67.78) continue;
+      if (x >= 142.87 && x <= 143.69) positions[i] = 143.68098;
+      if (x >= 41.31 && x <= 42.13) positions[i] = 41.31902;
+    }
+    geometry.computeVertexNormals();
+  }
   geometry.computeBoundingSphere();
   return [name, geometry];
 }
